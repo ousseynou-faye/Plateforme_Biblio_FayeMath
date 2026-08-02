@@ -1,0 +1,59 @@
+# .gitattributes — FayeMath Academy
+#
+# Pourquoi ce fichier existe (01/08/2026)
+# ---------------------------------------
+# Sans lui, Git comparait des fichiers enregistrés en CRLF (fins de ligne Windows)
+# à des versions stockées en LF : 20 fichiers apparaissaient « modifiés » alors que
+# leur contenu était strictement identique. Cela rendait `git diff` illisible et donc
+# inapplicable la règle de sécurité §7.8 de CLAUDE.md (relire chaque diff avant commit,
+# pour vérifier qu'aucune clé n'y apparaît).
+#
+# Convention retenue : LF dans le dépôt, quel que soit le poste. Git convertit à la
+# volée à l'extraction sous Windows ; les éditeurs modernes (VS Code, Android Studio)
+# gèrent le LF sans aucun problème.
+#
+# Après avoir ajouté ce fichier, lancer UNE FOIS à la racine du projet :
+#     git add --renormalize .
+#     git status          # les fichiers « modifiés » fantômes doivent disparaître
+
+# Par défaut : Git détecte les fichiers texte et les normalise en LF dans le dépôt.
+* text=auto eol=lf
+
+# Sources et configuration — texte explicite
+*.dart      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.kt        text eol=lf
+*.kts       text eol=lf
+*.java      text eol=lf
+*.gradle    text eol=lf
+*.xml       text eol=lf
+*.properties text eol=lf
+*.sh        text eol=lf
+gradlew     text eol=lf
+
+# Scripts Windows — doivent RESTER en CRLF pour s'exécuter correctement
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# Binaires — jamais de conversion de fins de ligne
+*.pdf       binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.webp      binary
+*.ttf       binary
+*.otf       binary
+*.woff      binary
+*.woff2     binary
+*.jar       binary
+*.keystore  binary
+*.jks       binary
+*.so        binary
+*.aar       binary
+*.zip       binary
