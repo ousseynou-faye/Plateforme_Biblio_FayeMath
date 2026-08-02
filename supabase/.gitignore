@@ -1,0 +1,7 @@
+# Supabase CLI — état local et cache, ne jamais versionner
+# (équivalent au .gitignore que `supabase init` génère)
+.branches
+.temp
+
+# Secrets locaux éventuels du CLI Supabase
+.env

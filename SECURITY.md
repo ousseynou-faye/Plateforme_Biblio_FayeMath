@@ -93,4 +93,18 @@ Principe directeur : la sécurité se conçoit à chaque étape (*secure by desi
 
 ---
 
+## 11. Secrets d'infrastructure Supabase (ajouté le 02/08/2026)
+
+La création du projet Supabase (étape 9) fait apparaître des secrets d'un autre type que les clés applicatives du §1 — à traiter avec le même soin.
+
+- **Mot de passe de la base Postgres.** Choisi à la création du projet, il ouvre un accès direct à la base via le rôle `postgres`, qui **contourne le RLS**. Il est **distinct** de la clé `anon` (publique, embarquée) et de la clé `service_role` (§1).
+  - Jamais dans le dépôt Git, jamais dans `config/*.json`, jamais en clair dans un log.
+  - À conserver dans un gestionnaire de secrets personnel, hors dépôt — au même rang que la future clé de signature Android (§10).
+  - Saisi manuellement par Ousseynou lors de `supabase link` / `supabase db push` ; il ne doit apparaître dans aucune commande consignée dans un fichier versionné.
+- **Personal Access Token (PAT) du CLI Supabase.** Nécessaire à `supabase login --token` en environnement non interactif (les commandes `!` de Claude Code sont non-TTY). Même règle : hors dépôt, révocable depuis le tableau de bord en cas de compromission.
+
+Rappel : la clé `service_role` reste le secret le plus sensible — elle ne quitte jamais le poste local d'Ousseynou et n'entre dans aucun fichier du dépôt, aucun log, aucun message persistant.
+
+---
+
 *Ce document vit et se complète au fil du projet — toute nouvelle décision de sécurité doit y être ajoutée, datée, comme dans le Journal de Développement.*
