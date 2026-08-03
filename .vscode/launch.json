@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Injecte les secrets Supabase depuis config/dev.json (SECURITY.md §1),
+      // pour eviter de retaper --dart-define-from-file a chaque lancement.
+      "name": "fayemath_academy (dev)",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": ["--dart-define-from-file=config/dev.json"]
+    }
+  ]
+}
