@@ -1,85 +1,55 @@
 import 'package:flutter/material.dart';
 
-class CompteurDemoScreen extends StatefulWidget {
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import 'package:fayemath_academy/presentation/providers/compteur_demo_provider.dart';
+
+/// Ecran de demonstration (temporaire, remplace a l'etape 11).
+///
+/// Il herite de [ConsumerWidget] au lieu de [StatelessWidget] : c'est ce qui lui
+/// donne acces a `ref`, la poignee pour lire les providers Riverpod. L'ecran n'a
+/// plus d'etat local (`setState`) — l'etat du compteur vit dans le Notifier.
+class CompteurDemoScreen extends ConsumerWidget {
   const CompteurDemoScreen({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
 
   final String title;
 
   @override
-  State<CompteurDemoScreen> createState() => _CompteurDemoScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    // ref.watch abonne ce build au provider : des que le compteur change, seul
+    // ce widget est reconstruit. C'est l'equivalent Riverpod du setState, mais
+    // l'etat vit desormais hors de l'ecran, donc il est partageable.
+    final compteur = ref.watch(compteurDemoProvider);
 
-class _CompteurDemoScreenState extends State<CompteurDemoScreen> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the CompteurDemoScreen object that was
-        // created by the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: Text(title),
       ),
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('You have pushed the button this many times:'),
+            const Text('Vous avez appuyé sur le bouton ce nombre de fois :'),
             Text(
-              '$_counter',
+              '$compteur',
               style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            ElevatedButton(
+              // context.push empile la seconde route : la fleche retour de son
+              // AppBar (et son bouton "Retour") ramenent ici.
+              onPressed: () => context.push('/seconde'),
+              child: const Text('Ouvrir la seconde page'),
             ),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
+        // ref.read : lecture ponctuelle dans un callback, sans abonnement. On
+        // appelle la methode du Notifier, qui met a jour l'etat partage.
+        onPressed: () => ref.read(compteurDemoProvider.notifier).incrementer(),
+        tooltip: 'Incrémenter',
         child: const Icon(Icons.add),
       ),
     );

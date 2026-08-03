@@ -35,6 +35,22 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+  # État partagé — providers Riverpod (câblé au Lot B)
+  flutter_riverpod: ^3.4.2
+  # Navigation déclarative (câblé au Lot C)
+  go_router: ^17.3.0
+  # Base locale offline-first : API Drift + enrobage Flutter (moteur SQLite
+  # + ouverture du fichier). drift_flutter tire sqlite3_flutter_libs en
+  # transitif, ce qui nous isole de la migration EOL de ce paquet. (Lot D)
+  drift: ^2.34.3
+  drift_flutter: ^0.3.1
+  path_provider: ^2.1.6
+  # Client HTTP hors-Supabase : téléchargement des PDF hors-ligne
+  # (progression, annulation, streaming disque). (offline-first)
+  dio: ^5.11.0
+  # Client Supabase — Auth, base de données, Storage (câblé au Lot E)
+  supabase_flutter: ^2.16.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -45,6 +61,14 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+  # Génération de code Drift : build_runner (moteur) + drift_dev (greffon). (Lot D)
+  # Versions volontairement en retrait des toutes dernières : build_runner 2.16.0
+  # et drift_dev 2.34.5 exigent meta ^1.18.3, alors que notre Flutter SDK 3.44.8
+  # épingle meta 1.18.0. Ces pins sont les plus hautes compatibles avec ce SDK ;
+  # à réévaluer lors d'une future montée de version de Flutter.
+  drift_dev: ^2.34.0
+  build_runner: ^2.15.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
