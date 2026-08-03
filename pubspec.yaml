@@ -81,6 +81,24 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Police d'interface : Poppins, embarquee en local (fichiers .ttf dans fonts/),
+  # PAS via le paquet google_fonts qui peut telecharger la police au premier
+  # lancement — incompatible avec l'offline-first (CLAUDE.md §5, etape 11).
+  # Seules les 4 graisses reellement utilisees par le TextTheme sont embarquees
+  # (Regular/Medium/SemiBold/Bold), pour ne pas gonfler l'APK. Licence SIL OFL :
+  # fonts/OFL.txt.
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: fonts/Poppins-Regular.ttf
+          weight: 400
+        - asset: fonts/Poppins-Medium.ttf
+          weight: 500
+        - asset: fonts/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: fonts/Poppins-Bold.ttf
+          weight: 700
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
