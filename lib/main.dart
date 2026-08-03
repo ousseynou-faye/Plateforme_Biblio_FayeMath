@@ -5,11 +5,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:fayemath_academy/app.dart';
 import 'package:fayemath_academy/core/env/env.dart';
-import 'package:fayemath_academy/data/local/base_locale.dart';
 
 Future<void> main() async {
-  // Necessaire avant d'appeler un plugin (path_provider via drift_flutter,
-  // shared_preferences via supabase_flutter) depuis main(), donc avant runApp.
+  // Necessaire avant d'appeler un plugin (shared_preferences via supabase_flutter)
+  // depuis main(), donc avant runApp.
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialisation du client Supabase (Lot E). Les secrets viennent de
@@ -33,10 +32,6 @@ Future<void> main() async {
       '--dart-define-from-file=config/dev.json',
     );
   }
-
-  // Preuve Drift (Lot D) : ouvre la base locale, ecrit une ligne, la relit et
-  // journalise. A retirer avec la table de demonstration a l'etape 11.
-  await verifierBaseLocaleDemo();
 
   runApp(const FayeMathApp());
 }
