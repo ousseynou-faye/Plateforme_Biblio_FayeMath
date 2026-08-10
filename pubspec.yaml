@@ -50,6 +50,11 @@ dependencies:
   dio: ^5.11.0
   # Client Supabase — Auth, base de données, Storage (câblé au Lot E)
   supabase_flutter: ^2.16.0
+  # Coffre chiffré (Android Keystore) pour les jetons de session Supabase, au
+  # lieu de SharedPreferences en clair (SECURITY.md §2). Branché à
+  # Supabase.initialize à l'étape 13. Exige minSdk 24 — c'est déjà le défaut
+  # Flutter (flutter.minSdkVersion = 24), aucun changement android/ requis.
+  flutter_secure_storage: ^11.0.0
 
 dev_dependencies:
   flutter_test:

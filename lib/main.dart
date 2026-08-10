@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:fayemath_academy/app.dart';
 import 'package:fayemath_academy/core/env/env.dart';
+import 'package:fayemath_academy/data/local/stockage_session_securise.dart';
 
 Future<void> main() async {
   // Necessaire avant d'appeler un plugin (shared_preferences via supabase_flutter)
@@ -20,6 +21,12 @@ Future<void> main() async {
     await Supabase.initialize(
       url: Env.supabaseUrl,
       publishableKey: Env.supabaseAnonKey,
+      // Jetons de session (et verifieur PKCE) ranges dans le coffre CHIFFRE du
+      // telephone, pas dans SharedPreferences en clair (SECURITY.md §2, etape 13).
+      authOptions: const FlutterAuthClientOptions(
+        localStorage: StockageSessionSecurise(),
+        pkceAsyncStorage: StockagePkceSecurise(),
+      ),
     );
     if (kDebugMode) {
       // On journalise l'URL du projet (non secrete) pour confirmer la cible ;
