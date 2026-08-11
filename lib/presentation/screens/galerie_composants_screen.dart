@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:fayemath_academy/core/errors/echecs_authentification.dart';
 import 'package:fayemath_academy/core/theme/couleurs_marque.dart';
+import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/widgets/badge_premium_widget.dart';
 import 'package:fayemath_academy/presentation/widgets/bouton_primaire_widget.dart';
 import 'package:fayemath_academy/presentation/widgets/carte_selection_widget.dart';
@@ -14,13 +18,25 @@ import 'package:fayemath_academy/presentation/widgets/carte_selection_widget.dar
 /// chaque composant est montre dans ses etats cote a cote, donc aucun etat a
 /// gerer ici (pas de tension avec « Riverpod partout », les onTap sont des
 /// no-op de demonstration).
-class GalerieComposantsScreen extends StatelessWidget {
+class GalerieComposantsScreen extends ConsumerWidget {
   const GalerieComposantsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Charte & composants')),
+      appBar: AppBar(
+        title: const Text('Charte & composants'),
+        actions: [
+          // Bouton de deconnexion PROVISOIRE : l'accueil reel (etape 14+)
+          // portera la vraie gestion de compte. Present ici pour tester de bout
+          // en bout « se deconnecter / se reconnecter » (Definition of Done).
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Se deconnecter',
+            onPressed: () => _quitter(ref),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: const [
@@ -35,6 +51,22 @@ class GalerieComposantsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Deconnexion provisoire (voir le commentaire du bouton). Un invite revient
+  /// simplement a l'ecran d'authentification ; un compte connecte est deconnecte
+  /// cote serveur, puis le flux de session ramene lui aussi a cet ecran.
+  Future<void> _quitter(WidgetRef ref) async {
+    final etat = ref.read(etatAuthProvider);
+    if (etat is AuthInvite) {
+      ref.read(etatAuthProvider.notifier).quitterModeInvite();
+      return;
+    }
+    try {
+      await ref.read(authRepositoryProvider).seDeconnecter();
+    } on EchecAuthentification {
+      // La deconnexion locale suit de toute facon ; rien a afficher ici.
+    }
   }
 }
 
