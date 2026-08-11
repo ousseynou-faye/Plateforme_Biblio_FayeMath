@@ -52,9 +52,16 @@ dependencies:
   supabase_flutter: ^2.16.0
   # Coffre chiffré (Android Keystore) pour les jetons de session Supabase, au
   # lieu de SharedPreferences en clair (SECURITY.md §2). Branché à
-  # Supabase.initialize à l'étape 13. Exige minSdk 24 — c'est déjà le défaut
-  # Flutter (flutter.minSdkVersion = 24), aucun changement android/ requis.
-  flutter_secure_storage: ^11.0.0
+  # Supabase.initialize à l'étape 13.
+  # ÉPINGLÉ sur la branche 10.x : la 11.0.0 (sortie le 06/08/2026) monte
+  # compileSdk à 37, au-delà de ce que notre AGP 9.0.1 supporte (plafond
+  # documenté : API 36.1) — d'où l'échec de build « target android-37 ».
+  # La 10.3.1 cible compileSdk 36 et a déjà les chiffrements modernes (AES-GCM
+  # + clé RSA enveloppée du Keystore), rien de ce qu'on utilise (LocalStorage /
+  # GotrueAsyncStorage) ne dépend d'une nouveauté de la 11.x. minSdk 24 = défaut
+  # Flutter, aucun changement android/. À rouvrir quand l'AGP suivra le SDK 37
+  # (écart documenté au Journal, 10/08/2026).
+  flutter_secure_storage: ">=10.3.1 <11.0.0"
 
 dev_dependencies:
   flutter_test:
