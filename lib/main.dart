@@ -10,9 +10,11 @@ import 'package:fayemath_academy/data/local/base_locale.dart';
 import 'package:fayemath_academy/data/local/stockage_session_securise.dart';
 import 'package:fayemath_academy/data/repositories/auth_repository.dart';
 import 'package:fayemath_academy/data/repositories/catalogue_repository.dart';
+import 'package:fayemath_academy/data/repositories/chapitre_repository.dart';
 import 'package:fayemath_academy/data/repositories/profil_repository.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
+import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 
 Future<void> main() async {
@@ -71,6 +73,9 @@ Future<void> main() async {
         ),
         catalogueRepositoryProvider.overrideWith(
           (ref) => CatalogueRepositoryOfflineFirst(baseLocale, client),
+        ),
+        chapitreRepositoryProvider.overrideWith(
+          (ref) => ChapitreRepositoryOfflineFirst(baseLocale, client),
         ),
         profilRepositoryProvider.overrideWith(
           (ref) => ProfilRepositoryOfflineFirst(baseLocale, client),
