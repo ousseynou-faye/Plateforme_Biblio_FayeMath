@@ -18,7 +18,7 @@ L'intérêt d'une convention n'est pas qu'elle soit la meilleure — c'est qu'el
 | **Vocabulaire métier** (entités, champs, valeurs) | **Français** | `Chapitre`, `Ressource`, `Progression`, `type: 'corrige_evaluation'` — c'est déjà la langue du cadrage, du schéma Supabase et du manifeste CSV. Traduire en anglais créerait une double correspondance permanente et des bugs de traduction. |
 | **Vocabulaire technique** (patterns, mots-clés) | **Anglais** | `repository`, `provider`, `state`, `builder`, `controller` — ce sont les termes de Flutter et de Dart, tout l'écosystème et toute la documentation les emploient. |
 | **Commentaires et documentation** | **Français** | C'est ton projet, tu le reliras dans deux ans. |
-| **Messages affichés à l'élève** | **Français** | Libellés exacts dans `SPECIFICATIONS_V2_Plateforme.md` — ne jamais les improviser. |
+| **Messages affichés à l'élève** | **Français, sans accents** | Libellés exacts dans `SPECIFICATIONS_V2_Plateforme.md` — ne jamais les improviser. **Sans accents dans les chaînes Dart** (convention appliquée depuis l'écran d'auth de l'étape 13 ; mêmes motifs que pour les commits — accents fragiles dans certains terminaux/diffs Windows). **Exception :** les valeurs de données gardent les leurs (ex. `Mathématiques`, `Physique-chimie`), alignées sur le schéma Supabase. |
 | **Messages de commit** | **Français**, sans accents | Les accents passent mal dans certains terminaux Windows. |
 
 **En pratique :** `ChapitreRepository`, `ProgressionState`, `RessourceCardWidget`, `chapitreProvider`. Le nom métier en français, le suffixe technique en anglais.
