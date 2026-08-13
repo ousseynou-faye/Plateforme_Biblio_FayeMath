@@ -6,9 +6,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:fayemath_academy/app.dart';
 import 'package:fayemath_academy/core/env/env.dart';
+import 'package:fayemath_academy/data/local/base_locale.dart';
 import 'package:fayemath_academy/data/local/stockage_session_securise.dart';
 import 'package:fayemath_academy/data/repositories/auth_repository.dart';
+import 'package:fayemath_academy/data/repositories/catalogue_repository.dart';
+import 'package:fayemath_academy/data/repositories/profil_repository.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
+import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
+import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 
 Future<void> main() async {
   // Necessaire avant d'appeler un plugin (secure storage / supabase_flutter)
@@ -49,15 +54,26 @@ Future<void> main() async {
     debugPrint('[Supabase] client initialise — projet: ${Env.supabaseUrl}');
   }
 
+  // Base locale Drift, ouverte UNE fois et partagee par les repositories
+  // offline-first (catalogue, profil). Brique du contrat hors-ligne.
+  final baseLocale = BaseLocale();
+  final client = Supabase.instance.client;
+
   runApp(
     ProviderScope(
       overrides: [
-        // Injection de l'implementation Supabase du contrat d'authentification,
-        // faite ICI (racine de composition) pour que `presentation/` n'importe
-        // jamais `data/` (docs/ARCHITECTURE.md §3). On n'arrive ici que si la
-        // config est presente, donc Supabase.instance est pret.
+        // Injection des implementations `data/` des contrats du domaine, faite
+        // ICI (racine de composition) pour que `presentation/` n'importe jamais
+        // `data/` (docs/ARCHITECTURE.md §3). On n'arrive ici que si la config
+        // est presente, donc Supabase.instance est pret.
         authRepositoryProvider.overrideWith(
-          (ref) => AuthRepositorySupabase(Supabase.instance.client.auth),
+          (ref) => AuthRepositorySupabase(client.auth),
+        ),
+        catalogueRepositoryProvider.overrideWith(
+          (ref) => CatalogueRepositoryOfflineFirst(baseLocale, client),
+        ),
+        profilRepositoryProvider.overrideWith(
+          (ref) => ProfilRepositoryOfflineFirst(baseLocale, client),
         ),
       ],
       child: const FayeMathApp(),
