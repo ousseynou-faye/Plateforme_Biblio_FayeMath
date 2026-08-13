@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
 import 'package:fayemath_academy/domain/entities/cycle.dart';
 import 'package:fayemath_academy/domain/entities/matiere.dart';
@@ -15,10 +16,12 @@ import 'package:fayemath_academy/domain/entities/session_auth.dart';
 import 'package:fayemath_academy/domain/entities/utilisateur.dart';
 import 'package:fayemath_academy/domain/repositories/auth_repository.dart';
 import 'package:fayemath_academy/domain/repositories/catalogue_repository.dart';
+import 'package:fayemath_academy/domain/repositories/chapitre_repository.dart';
 import 'package:fayemath_academy/domain/repositories/profil_repository.dart';
 import 'package:fayemath_academy/app.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
+import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 
 /// Faux repository d'auth : « connecte » si [session] est non nul.
@@ -85,6 +88,16 @@ class _FauxProfilRepository implements ProfilRepository {
   }
 }
 
+/// Faux repository de chapitres : aucune bibliotheque -> l'accueil affiche son
+/// etat vide, le cas normal de l'etape 15 (le contenu reel arrive a l'etape 18).
+class _FauxChapitreRepository implements ChapitreRepository {
+  @override
+  Future<List<Chapitre>> chapitresDe({
+    required String classeId,
+    required String matiereId,
+  }) async => const [];
+}
+
 const _maths = Matiere(id: 'm-maths', nom: 'Mathématiques');
 final _catalogue = _FauxCatalogueRepository(
   lesClasses: const [
@@ -106,6 +119,7 @@ Future<void> monterApp(
         catalogueRepositoryProvider.overrideWithValue(
           catalogue ?? _FauxCatalogueRepository(),
         ),
+        chapitreRepositoryProvider.overrideWithValue(_FauxChapitreRepository()),
         profilRepositoryProvider.overrideWithValue(
           profil ?? _FauxProfilRepository(),
         ),
@@ -169,7 +183,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Charte & composants'), findsOneWidget);
+    expect(find.text('Bientot disponible'), findsOneWidget);
   });
 
   testWidgets('« Continuer sans compte » mene a l\'ecran de choix', (
@@ -213,6 +227,6 @@ void main() {
     await tester.tap(boutonValider);
     await tester.pumpAndSettle();
 
-    expect(find.text('Charte & composants'), findsOneWidget);
+    expect(find.text('Bientot disponible'), findsOneWidget);
   });
 }

@@ -9,7 +9,7 @@ import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 import 'package:fayemath_academy/presentation/screens/authentification_screen.dart';
 import 'package:fayemath_academy/presentation/screens/choix_classe_screen.dart';
 import 'package:fayemath_academy/presentation/screens/demarrage_screen.dart';
-import 'package:fayemath_academy/presentation/screens/galerie_composants_screen.dart';
+import 'package:fayemath_academy/presentation/screens/liste_chapitres_screen.dart';
 
 /// Chemins internes de navigation.
 const cheminDemarrage = '/demarrage';
@@ -59,7 +59,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: cheminAccueil,
-        builder: (context, state) => const GalerieComposantsScreen(),
+        builder: (context, state) => const ListeChapitresScreen(),
       ),
     ],
   );
