@@ -3,12 +3,14 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/choix_classe_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 import 'package:fayemath_academy/presentation/screens/authentification_screen.dart';
 import 'package:fayemath_academy/presentation/screens/choix_classe_screen.dart';
 import 'package:fayemath_academy/presentation/screens/demarrage_screen.dart';
+import 'package:fayemath_academy/presentation/screens/detail_chapitre_screen.dart';
 import 'package:fayemath_academy/presentation/screens/liste_chapitres_screen.dart';
 
 /// Chemins internes de navigation.
@@ -16,6 +18,13 @@ const cheminDemarrage = '/demarrage';
 const cheminConnexion = '/connexion';
 const cheminChoixClasse = '/choix-classe';
 const cheminAccueil = '/';
+const cheminChapitre = '/chapitre';
+
+/// Nom de la route de detail d'un chapitre. La liste ouvre cet ecran par
+/// `context.pushNamed('chapitre', ...)`. `presentation/` ne peut pas importer
+/// `routing/` (regle de dependance, docs/ARCHITECTURE.md §3) : le nom est donc
+/// partage par sa VALEUR (le litteral cote liste), jamais par import.
+const nomRouteChapitre = 'chapitre';
 
 /// Le routeur de l'application, expose en provider pour rediriger selon l'etat
 /// d'authentification ([etatAuthProvider]) ET, pour un connecte, l'etat de son
@@ -41,8 +50,15 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: rafraichisseur,
     redirect: (context, state) {
       final cible = _cibleNavigation(ref);
+      final ou = state.matchedLocation;
       // Deja au bon endroit -> ne rien faire (evite toute boucle).
-      return state.matchedLocation == cible ? null : cible;
+      if (ou == cible) return null;
+      // La zone « contenu » (accueil + detail d'un chapitre) forme un tout :
+      // quand l'eleve a droit au contenu (cible = accueil), on ne le rejette pas
+      // d'un sous-ecran de cette zone vers l'accueil — sinon tout `push` vers un
+      // detail rebondirait aussitot.
+      if (cible == cheminAccueil && _estZoneContenu(ou)) return null;
+      return cible;
     },
     routes: [
       GoRoute(
@@ -61,9 +77,28 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: cheminAccueil,
         builder: (context, state) => const ListeChapitresScreen(),
       ),
+      GoRoute(
+        name: nomRouteChapitre,
+        path: '$cheminChapitre/:chapitreId',
+        builder: (context, state) {
+          // Le detail a besoin de l'objet Chapitre (numero, titre) : il arrive en
+          // `extra`, deja charge par la liste — pas de relecture par id. `extra`
+          // ne survit pas a un lien profond / redemarrage a froid ; en V1 il n'y
+          // a pas de lien profond (l'app demarre sur /demarrage), donc le seul cas
+          // d'`extra` absent est pathologique -> repli neutre vers l'accueil.
+          final chapitre = state.extra;
+          if (chapitre is! Chapitre) return const _RepliAccueil();
+          return DetailChapitreScreen(chapitre: chapitre);
+        },
+      ),
     ],
   );
 });
+
+/// Les emplacements de la « zone contenu » : l'accueil et le detail d'un
+/// chapitre. Sert au `redirect` a ne pas rejeter un sous-ecran du contenu.
+bool _estZoneContenu(String emplacement) =>
+    emplacement == cheminAccueil || emplacement.startsWith('$cheminChapitre/');
 
 /// Ou l'utilisateur doit-il se trouver, selon son etat d'auth et — s'il est
 /// connecte — l'etat de son profil. Les deux `switch` sont exhaustifs (types
@@ -111,5 +146,20 @@ class _RafraichisseurNavigation extends ChangeNotifier {
     _profil.close();
     _choix.close();
     super.dispose();
+  }
+}
+
+/// Repli neutre : on ne peut pas afficher un detail sans son chapitre (`extra`
+/// absent). On revient a l'accueil au frame suivant. Cas limite uniquement : il
+/// n'y a pas de lien profond vers cet ecran en V1 (voir le builder de la route).
+class _RepliAccueil extends StatelessWidget {
+  const _RepliAccueil();
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) context.go(cheminAccueil);
+    });
+    return const SizedBox.shrink();
   }
 }

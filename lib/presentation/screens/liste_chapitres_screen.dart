@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
@@ -23,9 +24,8 @@ import 'package:fayemath_academy/presentation/widgets/bouton_primaire_widget.dar
 /// OMET, faute de brique existante et sans consommateur defini : le compteur
 /// « X termines » et la pastille de statut (pas de `ProgressionRepository`),
 /// l'indicateur « sur l'appareil / indisponible hors-ligne » (Phase 3), les
-/// boutons Filtrer / Recherche (ecran 19). Les lignes restent de vrais boutons
-/// accessibles mais sans navigation cablee : l'ecran de detail (ecran 6) n'existe
-/// pas encore.
+/// boutons Filtrer / Recherche (ecran 19). Les lignes sont de vrais boutons
+/// accessibles qui ouvrent l'ecran de detail du chapitre (ecran 6, etape 16).
 ///
 /// Tant qu'aucun chapitre reel n'existe en base (le contenu arrive a l'etape 18),
 /// l'ecran affiche son ETAT VIDE — comportement attendu, pas une erreur.
@@ -255,8 +255,8 @@ class _EnteteStrate extends StatelessWidget {
 }
 
 /// Une ligne de chapitre : numero + titre, vrai bouton accessible (>= 48 px de
-/// haut, Semantics). L'ouverture (ecran 6) n'existe pas encore : placeholder
-/// informatif, meme motif que « Mot de passe oublie ? » a l'etape 13.
+/// haut, Semantics). Le tap ouvre l'ecran de detail (ecran 6) via une navigation
+/// imperative (premiere de l'app — voir [_ouvrir]).
 class _LigneChapitre extends StatelessWidget {
   const _LigneChapitre({required this.chapitre});
 
@@ -311,11 +311,17 @@ class _LigneChapitre extends StatelessWidget {
   }
 
   void _ouvrir(BuildContext context) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('Le detail du chapitre arrive bientot.')),
-      );
+    // Premiere navigation imperative de l'app : on EMPILE l'ecran de detail
+    // (ecran 6) pour que la fleche « retour » ramene a la liste. On passe l'objet
+    // Chapitre en `extra` (deja charge) et son id en parametre de route
+    // (URL /chapitre/<id>). Le nom de route « chapitre » est defini dans
+    // routing/app_router.dart (nomRouteChapitre) ; `presentation/` ne peut pas
+    // importer `routing/` (regle de dependance, ARCHITECTURE §3), d'ou le litteral.
+    context.pushNamed(
+      'chapitre',
+      pathParameters: {'chapitreId': chapitre.id},
+      extra: chapitre,
+    );
   }
 }
 

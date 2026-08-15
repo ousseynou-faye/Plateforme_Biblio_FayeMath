@@ -6,11 +6,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
 import 'package:fayemath_academy/domain/entities/cycle.dart';
 import 'package:fayemath_academy/domain/entities/matiere.dart';
+import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/domain/entities/serie.dart';
 import 'package:fayemath_academy/domain/entities/session_auth.dart';
 import 'package:fayemath_academy/domain/entities/utilisateur.dart';
@@ -18,11 +20,14 @@ import 'package:fayemath_academy/domain/repositories/auth_repository.dart';
 import 'package:fayemath_academy/domain/repositories/catalogue_repository.dart';
 import 'package:fayemath_academy/domain/repositories/chapitre_repository.dart';
 import 'package:fayemath_academy/domain/repositories/profil_repository.dart';
+import 'package:fayemath_academy/domain/repositories/ressource_repository.dart';
 import 'package:fayemath_academy/app.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
+import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
+import 'package:fayemath_academy/presentation/screens/detail_chapitre_screen.dart';
 
 /// Faux repository d'auth : « connecte » si [session] est non nul.
 class _FauxAuthRepository implements AuthRepository {
@@ -88,14 +93,32 @@ class _FauxProfilRepository implements ProfilRepository {
   }
 }
 
-/// Faux repository de chapitres : aucune bibliotheque -> l'accueil affiche son
-/// etat vide, le cas normal de l'etape 15 (le contenu reel arrive a l'etape 18).
+/// Faux repository de chapitres : renvoie [chapitres] tel quel (defaut vide ->
+/// l'accueil affiche son etat vide, cas normal de l'etape 15 tant que le contenu
+/// reel n'existe pas).
 class _FauxChapitreRepository implements ChapitreRepository {
+  _FauxChapitreRepository([this.chapitres = const []]);
+
+  final List<Chapitre> chapitres;
+
   @override
   Future<List<Chapitre>> chapitresDe({
     required String classeId,
     required String matiereId,
-  }) async => const [];
+  }) async => chapitres;
+}
+
+/// Faux repository de ressources : renvoie [ressources] tel quel (defaut vide ->
+/// l'ecran de detail affiche « Documents bientot disponibles »).
+class _FauxRessourceRepository implements RessourceRepository {
+  _FauxRessourceRepository([this.ressources = const []]);
+
+  final List<Ressource> ressources;
+
+  @override
+  Future<List<Ressource>> ressourcesDuChapitre({
+    required String chapitreId,
+  }) async => ressources;
 }
 
 const _maths = Matiere(id: 'm-maths', nom: 'Mathématiques');
@@ -111,6 +134,8 @@ Future<void> monterApp(
   required AuthRepository auth,
   CatalogueRepository? catalogue,
   ProfilRepository? profil,
+  List<Chapitre> chapitres = const [],
+  List<Ressource> ressources = const [],
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -119,7 +144,12 @@ Future<void> monterApp(
         catalogueRepositoryProvider.overrideWithValue(
           catalogue ?? _FauxCatalogueRepository(),
         ),
-        chapitreRepositoryProvider.overrideWithValue(_FauxChapitreRepository()),
+        chapitreRepositoryProvider.overrideWithValue(
+          _FauxChapitreRepository(chapitres),
+        ),
+        ressourceRepositoryProvider.overrideWithValue(
+          _FauxRessourceRepository(ressources),
+        ),
         profilRepositoryProvider.overrideWithValue(
           profil ?? _FauxProfilRepository(),
         ),
@@ -228,5 +258,98 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Bientot disponible'), findsOneWidget);
+  });
+
+  testWidgets('accueil -> tap sur un chapitre -> ecran de detail (ecran 6)', (
+    tester,
+  ) async {
+    await monterApp(
+      tester,
+      auth: _FauxAuthRepository(
+        session: const SessionAuth(utilisateurId: 'u1'),
+      ),
+      catalogue: _catalogue,
+      profil: _FauxProfilRepository(
+        profil: Utilisateur(
+          id: 'u1',
+          classeId: 'c-6e',
+          serie: null,
+          creeLe: DateTime(2026, 8, 13),
+        ),
+      ),
+      chapitres: const [
+        Chapitre(
+          id: 'ch-3',
+          classeId: 'c-6e',
+          matiereId: 'm-maths',
+          numero: 3,
+          titre: 'Les triangles',
+          strate: 'Activites geometriques',
+          ordre: 3,
+        ),
+      ],
+    );
+
+    // L'accueil liste le chapitre.
+    expect(find.text('Les triangles'), findsOneWidget);
+
+    // Tap -> navigation imperative (pushNamed « chapitre ») + redirect qui
+    // autorise la zone contenu : on arrive sur le detail (ecran 6). Ressources
+    // vides -> etat « Documents bientot disponibles ».
+    await tester.tap(find.text('Les triangles'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Chapitre 3'), findsOneWidget);
+    expect(find.text('Documents bientot disponibles'), findsOneWidget);
+  });
+
+  // Tests NEGATIFS du redirect : un acces direct a /chapitre/xyz (simule un futur
+  // lien profond, inexploitable en V1 ou la seule porte est le tap depuis
+  // l'accueil) doit renvoyer qui n'a pas droit au contenu. L'exception de zone ne
+  // s'ouvre que si cible == accueil ; ces tests le prouvent.
+  testWidgets('deconnecte : acces direct a /chapitre/xyz -> renvoye a l\'auth', (
+    tester,
+  ) async {
+    await monterApp(tester, auth: _FauxAuthRepository());
+    expect(
+      find.widgetWithText(FilledButton, 'Creer mon compte'),
+      findsOneWidget,
+    );
+
+    tester.element(find.byType(Scaffold).first).go('/chapitre/xyz');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DetailChapitreScreen), findsNothing);
+    expect(
+      find.widgetWithText(FilledButton, 'Creer mon compte'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('sans classe : acces direct a /chapitre/xyz -> renvoye au choix', (
+    tester,
+  ) async {
+    await monterApp(
+      tester,
+      auth: _FauxAuthRepository(
+        session: const SessionAuth(utilisateurId: 'u1'),
+      ),
+      catalogue: _catalogue,
+      profil: _FauxProfilRepository(
+        profil: Utilisateur(
+          id: 'u1',
+          classeId: null,
+          serie: null,
+          creeLe: DateTime(2026, 8, 13),
+        ),
+      ),
+    );
+    expect(find.text('Ta classe'), findsOneWidget);
+
+    tester.element(find.byType(Scaffold).first).go('/chapitre/xyz');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DetailChapitreScreen), findsNothing);
+    expect(find.text('Ta classe'), findsOneWidget);
   });
 }
