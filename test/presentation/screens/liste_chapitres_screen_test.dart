@@ -30,6 +30,9 @@ class _FauxAuthRepository implements AuthRepository {
 
   final SessionAuth? session;
 
+  /// Mouchard : passe a vrai des que l'ecran demande la deconnexion.
+  bool deconnexionAppelee = false;
+
   @override
   SessionAuth? get sessionCourante => session;
   @override
@@ -45,7 +48,9 @@ class _FauxAuthRepository implements AuthRepository {
     required String motDePasse,
   }) async {}
   @override
-  Future<void> seDeconnecter() async {}
+  Future<void> seDeconnecter() async {
+    deconnexionAppelee = true;
+  }
 }
 
 class _FauxCatalogueRepository implements CatalogueRepository {
@@ -107,12 +112,16 @@ Chapitre _chap({
 Future<void> _monterEcran(
   WidgetTester tester, {
   required List<Chapitre> chapitres,
+  _FauxAuthRepository? authRepository,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         authRepositoryProvider.overrideWithValue(
-          _FauxAuthRepository(session: const SessionAuth(utilisateurId: 'u1')),
+          authRepository ??
+              _FauxAuthRepository(
+                session: const SessionAuth(utilisateurId: 'u1'),
+              ),
         ),
         catalogueRepositoryProvider.overrideWithValue(
           _FauxCatalogueRepository(const [_classe6e], const [_maths]),
@@ -175,4 +184,23 @@ void main() {
     // Ce n'est pas l'etat d'erreur.
     expect(find.text('Impossible de charger les chapitres.'), findsNothing);
   });
+
+  testWidgets(
+    'le bouton de deconnexion (provisoire) declenche seDeconnecter',
+    (tester) async {
+      final auth = _FauxAuthRepository(
+        session: const SessionAuth(utilisateurId: 'u1'),
+      );
+      await _monterEcran(tester, chapitres: const [], authRepository: auth);
+
+      // Le bouton est present dans l'AppBar (accessible par son tooltip).
+      final bouton = find.byTooltip('Se deconnecter');
+      expect(bouton, findsOneWidget);
+
+      await tester.tap(bouton);
+      await tester.pump();
+
+      expect(auth.deconnexionAppelee, isTrue);
+    },
+  );
 }
