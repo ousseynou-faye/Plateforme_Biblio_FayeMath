@@ -12,10 +12,12 @@ import 'package:fayemath_academy/data/repositories/auth_repository.dart';
 import 'package:fayemath_academy/data/repositories/catalogue_repository.dart';
 import 'package:fayemath_academy/data/repositories/chapitre_repository.dart';
 import 'package:fayemath_academy/data/repositories/profil_repository.dart';
+import 'package:fayemath_academy/data/repositories/ressource_repository.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
+import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
 
 Future<void> main() async {
   // Necessaire avant d'appeler un plugin (secure storage / supabase_flutter)
@@ -76,6 +78,9 @@ Future<void> main() async {
         ),
         chapitreRepositoryProvider.overrideWith(
           (ref) => ChapitreRepositoryOfflineFirst(baseLocale, client),
+        ),
+        ressourceRepositoryProvider.overrideWith(
+          (ref) => RessourceRepositoryOfflineFirst(baseLocale, client),
         ),
         profilRepositoryProvider.overrideWith(
           (ref) => ProfilRepositoryOfflineFirst(baseLocale, client),
