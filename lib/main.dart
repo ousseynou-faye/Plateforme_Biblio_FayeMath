@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:fayemath_academy/app.dart';
 import 'package:fayemath_academy/core/env/env.dart';
+import 'package:fayemath_academy/data/demo/repositories_demo.dart';
 import 'package:fayemath_academy/data/local/base_locale.dart';
 import 'package:fayemath_academy/data/local/stockage_session_securise.dart';
 import 'package:fayemath_academy/data/repositories/auth_repository.dart';
@@ -56,6 +57,12 @@ Future<void> main() async {
     // On journalise l'URL du projet (non secrete) pour confirmer la cible ;
     // jamais la valeur de la cle (SECURITY.md §5).
     debugPrint('[Supabase] client initialise — projet: ${Env.supabaseUrl}');
+    if (Env.modeDemo) {
+      debugPrint(
+        '[Demo] MODE_DEMO actif — chapitre + documents de demonstration en '
+        'memoire (data/demo/). A desactiver avant l\'etape 33.',
+      );
+    }
   }
 
   // Base locale Drift, ouverte UNE fois et partagee par les repositories
@@ -76,12 +83,26 @@ Future<void> main() async {
         catalogueRepositoryProvider.overrideWith(
           (ref) => CatalogueRepositoryOfflineFirst(baseLocale, client),
         ),
-        chapitreRepositoryProvider.overrideWith(
-          (ref) => ChapitreRepositoryOfflineFirst(baseLocale, client),
-        ),
-        ressourceRepositoryProvider.overrideWith(
-          (ref) => RessourceRepositoryOfflineFirst(baseLocale, client),
-        ),
+        // Chapitres & ressources : en MODE DEMO (cle MODE_DEMO de config/dev.json),
+        // des repos EN MEMOIRE (un chapitre + ses documents, PDF embarque)
+        // court-circuitent la synchro pour prouver le lecteur PDF alors que la base
+        // est vide (etape 17, voir data/demo/). Hors mode demo : les vrais repos
+        // offline-first. Le catalogue (classes/matieres) reste toujours reel.
+        if (Env.modeDemo) ...[
+          chapitreRepositoryProvider.overrideWith(
+            (ref) => const ChapitreRepositoryDemo(),
+          ),
+          ressourceRepositoryProvider.overrideWith(
+            (ref) => const RessourceRepositoryDemo(),
+          ),
+        ] else ...[
+          chapitreRepositoryProvider.overrideWith(
+            (ref) => ChapitreRepositoryOfflineFirst(baseLocale, client),
+          ),
+          ressourceRepositoryProvider.overrideWith(
+            (ref) => RessourceRepositoryOfflineFirst(baseLocale, client),
+          ),
+        ],
         profilRepositoryProvider.overrideWith(
           (ref) => ProfilRepositoryOfflineFirst(baseLocale, client),
         ),

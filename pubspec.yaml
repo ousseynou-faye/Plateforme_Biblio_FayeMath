@@ -63,6 +63,12 @@ dependencies:
   # (écart documenté au Journal, 10/08/2026).
   flutter_secure_storage: ">=10.3.1 <11.0.0"
 
+  # Lecture PDF (etape 17, ecran 7) : rendu de page, pagination, zoom d'echelle.
+  # Licence MIT, sans demarche de licence commerciale (contrairement a
+  # syncfusion_flutter_pdfviewer). Ouvre un PDF depuis un asset, un fichier ou des
+  # bytes — couvre le besoin de l'ecran 7 et le futur offline-first (Phase 3).
+  pdfx: ^2.9.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -92,6 +98,14 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # DEMO TEMPORAIRE (etape 17) : UN seul PDF reel deja commite, embarque pour
+  # prouver le lecteur (ecran 7) alors que la base est vide jusqu'a l'etape 18.
+  # Reference en LECTURE SEULE un fichier de assets/bibliotheque/ (zone rouge NON
+  # modifiee). A RETIRER a l'etape 18, quand le contenu reel arrive par Storage
+  # (voir data/demo/ et le drapeau MODE_DEMO).
+  assets:
+    - "assets/bibliotheque/6e-maths/01 - Activités Numériques/Chap 01 - Nombres décimaux arithmétiques/01 - Cours/Cours - Chap 01 - Nombres décimaux arithmétiques.pdf"
 
   # Police d'interface : Poppins, embarquee en local (fichiers .ttf dans fonts/),
   # PAS via le paquet google_fonts qui peut telecharger la police au premier
