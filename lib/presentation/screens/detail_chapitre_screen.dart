@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:fayemath_academy/core/format/taille_fichier.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
@@ -80,7 +81,7 @@ class _Corps extends StatelessWidget {
           _TitreSection(nombre: ressources.length),
           const SizedBox(height: 8),
           for (final ressource in ressources)
-            _LigneDocument(ressource: ressource),
+            _LigneDocument(ressource: ressource, chapitre: chapitre),
           const SizedBox(height: 8),
           const _NoteBasDePage(),
         ],
@@ -198,12 +199,13 @@ class _TitreSection extends StatelessWidget {
 }
 
 /// Une ligne de document : icone du type, libelle, taille, badge gratuit/premium.
-/// Vrai bouton accessible (>= 48 px, Semantics). Le tap OUVRE plus tard (lecteur
-/// PDF = etape 17) : ici, placeholder informatif.
+/// Vrai bouton accessible (>= 48 px, Semantics). Le tap OUVRE le lecteur (ecran 7,
+/// etape 17) via une navigation imperative (`pushNamed('document', ...)`).
 class _LigneDocument extends StatelessWidget {
-  const _LigneDocument({required this.ressource});
+  const _LigneDocument({required this.ressource, required this.chapitre});
 
   final Ressource ressource;
+  final Chapitre chapitre;
 
   @override
   Widget build(BuildContext context) {
@@ -228,9 +230,19 @@ class _LigneDocument extends StatelessWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(11),
             splashFactory: reduireMouvement ? NoSplash.splashFactory : null,
-            onTap: () => _afficherBientot(
-              context,
-              'L\'ouverture du document arrive bientot.',
+            // Ouvre le lecteur (ecran 7). On EMPILE l'ecran pour que « retour »
+            // revienne au detail. La Ressource ET le Chapitre (deja charges)
+            // voyagent ENSEMBLE en `extra` (record) ; les id vont en parametres
+            // de route (URL /chapitre/<id>/document/<id>). Le nom « document » est
+            // defini dans routing/ (nomRouteDocument) ; `presentation/` ne peut
+            // pas importer `routing/` (ARCHITECTURE §3), d'ou le litteral.
+            onTap: () => context.pushNamed(
+              'document',
+              pathParameters: {
+                'chapitreId': chapitre.id,
+                'ressourceId': ressource.id,
+              },
+              extra: (ressource: ressource, chapitre: chapitre),
             ),
             child: Container(
               constraints: const BoxConstraints(minHeight: 64),

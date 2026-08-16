@@ -15,6 +15,7 @@ import 'package:fayemath_academy/domain/entities/matiere.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/domain/entities/serie.dart';
 import 'package:fayemath_academy/domain/entities/session_auth.dart';
+import 'package:fayemath_academy/domain/entities/type_ressource.dart';
 import 'package:fayemath_academy/domain/entities/utilisateur.dart';
 import 'package:fayemath_academy/domain/repositories/auth_repository.dart';
 import 'package:fayemath_academy/domain/repositories/catalogue_repository.dart';
@@ -28,6 +29,7 @@ import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
 import 'package:fayemath_academy/presentation/screens/detail_chapitre_screen.dart';
+import 'package:fayemath_academy/presentation/screens/lecteur_document_screen.dart';
 
 /// Faux repository d'auth : « connecte » si [session] est non nul.
 class _FauxAuthRepository implements AuthRepository {
@@ -303,10 +305,70 @@ void main() {
     expect(find.text('Documents bientot disponibles'), findsOneWidget);
   });
 
+  testWidgets('detail -> tap document -> lecteur (ecran 7)', (tester) async {
+    await monterApp(
+      tester,
+      auth: _FauxAuthRepository(
+        session: const SessionAuth(utilisateurId: 'u1'),
+      ),
+      catalogue: _catalogue,
+      profil: _FauxProfilRepository(
+        profil: Utilisateur(
+          id: 'u1',
+          classeId: 'c-6e',
+          serie: null,
+          creeLe: DateTime(2026, 8, 13),
+        ),
+      ),
+      chapitres: const [
+        Chapitre(
+          id: 'ch-3',
+          classeId: 'c-6e',
+          matiereId: 'm-maths',
+          numero: 3,
+          titre: 'Les triangles',
+          strate: 'Activites geometriques',
+          ordre: 3,
+        ),
+      ],
+      ressources: const [
+        Ressource(
+          id: 'r-1',
+          chapitreId: 'ch-3',
+          classeId: null,
+          matiereId: null,
+          type: TypeRessource.cours,
+          titre: 'Cours',
+          tailleOctets: 168 * 1024,
+          premium: false,
+          version: 1,
+          // Pas de PDF local -> le lecteur montre l'etat de disponibilite (aucun
+          // rendu PDF, impossible a monter en test) ; la CHAINE de navigation
+          // liste -> detail -> lecteur est prouvee de bout en bout.
+          cheminStorage: null,
+          ordre: 1,
+        ),
+      ],
+    );
+
+    // Accueil -> detail.
+    await tester.tap(find.text('Les triangles'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DetailChapitreScreen), findsOneWidget);
+
+    // Detail -> lecteur (tap sur la ligne « Cours »).
+    await tester.tap(find.text('Cours'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LecteurDocumentScreen), findsOneWidget);
+    expect(find.text('Document pas encore sur l\'appareil'), findsOneWidget);
+  });
+
   // Tests NEGATIFS du redirect : un acces direct a /chapitre/xyz (simule un futur
   // lien profond, inexploitable en V1 ou la seule porte est le tap depuis
   // l'accueil) doit renvoyer qui n'a pas droit au contenu. L'exception de zone ne
-  // s'ouvre que si cible == accueil ; ces tests le prouvent.
+  // s'ouvre que si cible == accueil ; ces tests le prouvent — y compris sur la
+  // route imbriquee du lecteur /chapitre/xyz/document/abc (etape 17).
   testWidgets('deconnecte : acces direct a /chapitre/xyz -> renvoye a l\'auth', (
     tester,
   ) async {
@@ -352,4 +414,56 @@ void main() {
     expect(find.byType(DetailChapitreScreen), findsNothing);
     expect(find.text('Ta classe'), findsOneWidget);
   });
+
+  testWidgets(
+    'deconnecte : acces direct a /chapitre/xyz/document/abc -> renvoye a l\'auth',
+    (tester) async {
+      await monterApp(tester, auth: _FauxAuthRepository());
+      expect(
+        find.widgetWithText(FilledButton, 'Creer mon compte'),
+        findsOneWidget,
+      );
+
+      tester
+          .element(find.byType(Scaffold).first)
+          .go('/chapitre/xyz/document/abc');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LecteurDocumentScreen), findsNothing);
+      expect(
+        find.widgetWithText(FilledButton, 'Creer mon compte'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'sans classe : acces direct a /chapitre/xyz/document/abc -> renvoye au choix',
+    (tester) async {
+      await monterApp(
+        tester,
+        auth: _FauxAuthRepository(
+          session: const SessionAuth(utilisateurId: 'u1'),
+        ),
+        catalogue: _catalogue,
+        profil: _FauxProfilRepository(
+          profil: Utilisateur(
+            id: 'u1',
+            classeId: null,
+            serie: null,
+            creeLe: DateTime(2026, 8, 13),
+          ),
+        ),
+      );
+      expect(find.text('Ta classe'), findsOneWidget);
+
+      tester
+          .element(find.byType(Scaffold).first)
+          .go('/chapitre/xyz/document/abc');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LecteurDocumentScreen), findsNothing);
+      expect(find.text('Ta classe'), findsOneWidget);
+    },
+  );
 }

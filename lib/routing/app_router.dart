@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
+import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/choix_classe_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
@@ -11,6 +12,7 @@ import 'package:fayemath_academy/presentation/screens/authentification_screen.da
 import 'package:fayemath_academy/presentation/screens/choix_classe_screen.dart';
 import 'package:fayemath_academy/presentation/screens/demarrage_screen.dart';
 import 'package:fayemath_academy/presentation/screens/detail_chapitre_screen.dart';
+import 'package:fayemath_academy/presentation/screens/lecteur_document_screen.dart';
 import 'package:fayemath_academy/presentation/screens/liste_chapitres_screen.dart';
 
 /// Chemins internes de navigation.
@@ -25,6 +27,12 @@ const cheminChapitre = '/chapitre';
 /// `routing/` (regle de dependance, docs/ARCHITECTURE.md §3) : le nom est donc
 /// partage par sa VALEUR (le litteral cote liste), jamais par import.
 const nomRouteChapitre = 'chapitre';
+
+/// Nom de la route du lecteur de document (ecran 7). Le detail ouvre cet ecran
+/// par `context.pushNamed('document', ...)`. Meme regle que [nomRouteChapitre] :
+/// le nom est partage par sa VALEUR cote detail (le litteral), jamais par import
+/// de `routing/` (regle de dependance, docs/ARCHITECTURE.md §3).
+const nomRouteDocument = 'document';
 
 /// Le routeur de l'application, expose en provider pour rediriger selon l'etat
 /// d'authentification ([etatAuthProvider]) ET, pour un connecte, l'etat de son
@@ -89,6 +97,27 @@ final routerProvider = Provider<GoRouter>((ref) {
           final chapitre = state.extra;
           if (chapitre is! Chapitre) return const _RepliAccueil();
           return DetailChapitreScreen(chapitre: chapitre);
+        },
+      ),
+      GoRoute(
+        name: nomRouteDocument,
+        path: '$cheminChapitre/:chapitreId/document/:ressourceId',
+        builder: (context, state) {
+          // Le lecteur (ecran 7) a besoin de la Ressource ET du Chapitre (pour le
+          // sous-bandeau), deja charges par l'ecran de detail : ils arrivent
+          // ENSEMBLE en `extra` (un record). Pas de relecture par id — aucun
+          // repository « par id » n'existe, meme principe qu'a l'etape 16.
+          // `extra` ne survit pas a un lien profond / redemarrage a froid ; en V1
+          // il n'y a pas de lien profond (l'app demarre sur /demarrage), donc le
+          // seul cas d'`extra` absent est pathologique -> repli vers l'accueil.
+          final args = state.extra;
+          if (args is ({Ressource ressource, Chapitre chapitre})) {
+            return LecteurDocumentScreen(
+              ressource: args.ressource,
+              chapitre: args.chapitre,
+            );
+          }
+          return const _RepliAccueil();
         },
       ),
     ],
