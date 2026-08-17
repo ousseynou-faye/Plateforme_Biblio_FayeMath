@@ -99,14 +99,6 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # DEMO TEMPORAIRE (etape 17) : UN seul PDF reel deja commite, embarque pour
-  # prouver le lecteur (ecran 7) alors que la base est vide jusqu'a l'etape 18.
-  # Reference en LECTURE SEULE un fichier de assets/bibliotheque/ (zone rouge NON
-  # modifiee). A RETIRER a l'etape 18, quand le contenu reel arrive par Storage
-  # (voir data/demo/ et le drapeau MODE_DEMO).
-  assets:
-    - "assets/bibliotheque/6e-maths/01 - Activités Numériques/Chap 01 - Nombres décimaux arithmétiques/01 - Cours/Cours - Chap 01 - Nombres décimaux arithmétiques.pdf"
-
   # Police d'interface : Poppins, embarquee en local (fichiers .ttf dans fonts/),
   # PAS via le paquet google_fonts qui peut telecharger la police au premier
   # lancement — incompatible avec l'offline-first (CLAUDE.md §5, etape 11).

@@ -18,15 +18,4 @@ abstract final class Env {
   /// plutot qu'un plantage cryptique de `Supabase.initialize`.
   static bool get estConfigure =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
-
-  /// Vrai si le MODE DEMONSTRATION est actif : des repositories de chapitres et
-  /// de ressources EN MEMOIRE (un chapitre + ses documents fictifs, PDF embarque)
-  /// remplacent les repositories offline-first, pour prouver le lecteur PDF
-  /// (etape 17) alors que la base est vide jusqu'a l'etape 18. Voir `data/demo/`.
-  ///
-  /// Injecte via la cle `MODE_DEMO` de `config/dev.json`
-  /// (`--dart-define-from-file`). ABSENT par defaut -> `false` : aucune donnee de
-  /// demo ne peut partir dans une build de production. /!\ A garder desactive
-  /// avant le test ferme Play Store (etape 33).
-  static const bool modeDemo = bool.fromEnvironment('MODE_DEMO');
 }

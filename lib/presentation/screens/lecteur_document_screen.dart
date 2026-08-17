@@ -15,12 +15,12 @@ import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart'
 /// reseau (deux notions distinctes, docs/GLOSSAIRE.md §6).
 ///
 /// Source du fichier (offline-first, docs/ARCHITECTURE.md §7) : on n'ouvre QUE ce
-/// qui est deja sur l'appareil. Regle simple et non couplee a la demo : un
-/// [Ressource.cheminStorage] prefixe `assets/` designe un PDF EMBARQUE, lisible
-/// directement (c'est le cas des documents de demonstration, `data/demo/`) ; tout
-/// autre cas — un chemin du bucket Storage non encore telecharge, ou `null` —
-/// signifie « pas encore sur l'appareil » : le moteur de telechargement relevera
-/// de la Phase 3. Rien n'est jamais telecharge ici.
+/// qui est deja sur l'appareil. Regle simple : un [Ressource.cheminStorage]
+/// prefixe `assets/` designe un PDF EMBARQUE, lisible directement ; tout autre
+/// cas — un chemin du bucket Storage non encore telecharge (cas du vrai contenu
+/// mis en ligne a l'etape 18), ou `null` — signifie « pas encore sur l'appareil »
+/// : le moteur de telechargement relevera de la Phase 3 (etape 19). Rien n'est
+/// jamais telecharge ici.
 ///
 /// `pdfx` (`PdfViewPinch`) n'est pas supporte sous Windows (il leve
 /// `UnimplementedError`) : c'est sans effet sur la cible Android, mais cela
