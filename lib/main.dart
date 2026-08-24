@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -8,16 +9,19 @@ import 'package:fayemath_academy/app.dart';
 import 'package:fayemath_academy/core/env/env.dart';
 import 'package:fayemath_academy/data/local/base_locale.dart';
 import 'package:fayemath_academy/data/local/stockage_session_securise.dart';
+import 'package:fayemath_academy/data/remote/telechargeur_fichier.dart';
 import 'package:fayemath_academy/data/repositories/auth_repository.dart';
 import 'package:fayemath_academy/data/repositories/catalogue_repository.dart';
 import 'package:fayemath_academy/data/repositories/chapitre_repository.dart';
 import 'package:fayemath_academy/data/repositories/profil_repository.dart';
 import 'package:fayemath_academy/data/repositories/ressource_repository.dart';
+import 'package:fayemath_academy/data/repositories/telechargement_repository.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
+import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
 
 Future<void> main() async {
   // Necessaire avant d'appeler un plugin (secure storage / supabase_flutter)
@@ -63,6 +67,11 @@ Future<void> main() async {
   final baseLocale = BaseLocale();
   final client = Supabase.instance.client;
 
+  // Client HTTP du moteur de telechargement (Phase 3, etape 19). Un seul `dio`
+  // partage ; le transfert reel des PDF passe par lui (progression, annulation,
+  // ecriture flux vers disque), l'URL signee est fabriquee cote Supabase.
+  final telechargeur = TelechargeurFichier(Dio());
+
   runApp(
     ProviderScope(
       overrides: [
@@ -87,6 +96,13 @@ Future<void> main() async {
         ),
         profilRepositoryProvider.overrideWith(
           (ref) => ProfilRepositoryOfflineFirst(baseLocale, client),
+        ),
+        // Moteur de telechargement hors-ligne (etape 19) : URL signee Supabase +
+        // transfert dio + trace en base. Ecrit le PDF dans l'espace prive de
+        // l'appareil pour que le lecteur ouvre le vrai document.
+        telechargementRepositoryProvider.overrideWith(
+          (ref) =>
+              TelechargementRepositoryStorage(baseLocale, client, telechargeur),
         ),
       ],
       child: const FayeMathApp(),
