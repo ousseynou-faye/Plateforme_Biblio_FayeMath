@@ -3,9 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfx/pdfx.dart';
 
+import 'package:fayemath_academy/core/errors/echec_telechargement.dart';
+import 'package:fayemath_academy/core/format/taille_fichier.dart';
+import 'package:fayemath_academy/core/telechargement/chemins_telechargement.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
+import 'package:fayemath_academy/domain/entities/etat_telechargement.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
+import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
+import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
+import 'package:fayemath_academy/presentation/widgets/bouton_primaire_widget.dart';
 
 /// Lecteur de document (maquette V2.1, ecran 7). Depuis le detail d'un chapitre
 /// (ecran 6), l'ouverture d'un document l'affiche ici : sous-bandeau (titre du
@@ -62,12 +69,29 @@ class _LecteurDocumentScreenState extends ConsumerState<LecteurDocumentScreen> {
   static const _niveauxZoom = [1.0, 1.5, 2.0];
   int _iZoom = 0;
 
+  /// Vrai si le PDF est EMBARQUE dans l'app (prefixe `assets/`) : lisible
+  /// directement, sans passer par le telechargement. Sinon, c'est un document du
+  /// bucket, ouvrable seulement une fois telecharge sur l'appareil (etape 19).
+  late final bool _estAsset;
+
   @override
   void initState() {
     super.initState();
     final chemin = widget.ressource.cheminStorage;
-    if (chemin != null && chemin.startsWith('assets/')) {
-      _controller = PdfControllerPinch(document: PdfDocument.openAsset(chemin));
+    _estAsset = CheminsTelechargement.estAssetEmbarque(chemin);
+    if (_estAsset) {
+      _controller = PdfControllerPinch(
+        document: PdfDocument.openAsset(chemin!),
+      );
+    } else {
+      // Document du bucket : on VERIFIE seulement s'il est deja sur l'appareil
+      // (lecture disque). Aucun telechargement n'est lance ici — il faut une
+      // action explicite de l'eleve (contrat hors-ligne, regle 1).
+      Future.microtask(
+        () => ref
+            .read(telechargementProvider.notifier)
+            .verifierPresence(widget.ressource.id),
+      );
     }
   }
 
@@ -96,10 +120,9 @@ class _LecteurDocumentScreenState extends ConsumerState<LecteurDocumentScreen> {
     // a la matrice courante. On compose via translationValues/diagonal3Values
     // (les helpers translate()/scale() de Matrix4 sont deprecies).
     final centre = rendu.size.center(Offset.zero);
-    final transformation =
-        Matrix4.translationValues(centre.dx, centre.dy, 0)
-          ..multiply(Matrix4.diagonal3Values(facteur, facteur, 1))
-          ..multiply(Matrix4.translationValues(-centre.dx, -centre.dy, 0));
+    final transformation = Matrix4.translationValues(centre.dx, centre.dy, 0)
+      ..multiply(Matrix4.diagonal3Values(facteur, facteur, 1))
+      ..multiply(Matrix4.translationValues(-centre.dx, -centre.dy, 0));
     controller.value = transformation.multiplied(controller.value);
   }
 
@@ -132,6 +155,26 @@ class _LecteurDocumentScreenState extends ConsumerState<LecteurDocumentScreen> {
       }
     }
 
+    // Etat du telechargement (un asset embarque est toujours « local »). On lit
+    // aussi l'etat d'auth : un invite ne peut rien telecharger (policy Storage,
+    // migration 06) — on lui propose de creer un compte plutot qu'un bouton qui
+    // echouerait cote serveur.
+    final vue = _estAsset
+        ? null
+        : ref.watch(vueTelechargementProvider(ressource.id));
+    final estConnecte = ref.watch(etatAuthProvider) is AuthConnecte;
+
+    // Ouvre le PDF des que le fichier telecharge est disponible localement : le
+    // controleur passe le relais de l'etat d'attente au rendu (une seule fois).
+    if (!_estAsset &&
+        _controller == null &&
+        vue!.etat == EtatTelechargement.local &&
+        vue.cheminLocal != null) {
+      _controller = PdfControllerPinch(
+        document: PdfDocument.openFile(vue.cheminLocal!),
+      );
+    }
+
     return Scaffold(
       // Barre du haut = le type du document (« Cours »...), + retour automatique.
       appBar: AppBar(title: Text(ressource.type.libelleAffichage)),
@@ -150,16 +193,33 @@ class _LecteurDocumentScreenState extends ConsumerState<LecteurDocumentScreen> {
               onZoom: _controller == null ? null : _cyclerZoom,
               partageActif: _controller != null,
             ),
-            Expanded(child: _corps()),
+            Expanded(child: _corps(vue, estConnecte)),
           ],
         ),
       ),
     );
   }
 
-  Widget _corps() {
+  Widget _corps(VueTelechargement? vue, bool estConnecte) {
     final controller = _controller;
-    if (controller == null) return const _DocumentIndisponible();
+    if (controller == null) {
+      // Pas de PDF ouvert : on montre l'etat du telechargement (a proposer / en
+      // cours / echec), ou l'invitation a creer un compte pour un invite.
+      return _ZoneTelechargement(
+        vue: vue ?? const VueTelechargement(),
+        tailleTexte: TailleFichier.enTexte(widget.ressource.tailleOctets),
+        premium: widget.ressource.premium,
+        estConnecte: estConnecte,
+        onTelecharger: () => ref
+            .read(telechargementProvider.notifier)
+            .demarrer(widget.ressource),
+        onAnnuler: () => ref
+            .read(telechargementProvider.notifier)
+            .annuler(widget.ressource.id),
+        onCreerCompte: () =>
+            ref.read(etatAuthProvider.notifier).quitterModeInvite(),
+      );
+    }
     // Le PDF remplit la zone ; la barre basse FLOTTE au-dessus (maquette).
     return Stack(
       children: [
@@ -412,7 +472,9 @@ class _BarreBasse extends StatelessWidget {
                         )
                       : null,
                 ),
-                Expanded(child: _Indicateur(page: page, total: total)),
+                Expanded(
+                  child: _Indicateur(page: page, total: total),
+                ),
                 _FlechePage(
                   icone: Icons.chevron_right,
                   actif: peutSuivante,
@@ -512,57 +574,269 @@ class _FlechePage extends StatelessWidget {
   }
 }
 
-/// Le document n'est pas encore sur l'appareil (pas de PDF local). Message centre
-/// sur la DISPONIBILITE du document — surtout pas sur le reseau (GLOSSAIRE §6).
-/// Etat normal tant que le telechargement (Phase 3) et le contenu reel (etape 18)
-/// n'existent pas.
-class _DocumentIndisponible extends StatelessWidget {
-  const _DocumentIndisponible();
+/// Libelles PURS de la zone de telechargement (testables sans monter l'ecran).
+abstract final class LibellesTelechargement {
+  /// Le message d'echec montre a l'eleve, choisi par la [cause]. Sans accents
+  /// (CONVENTIONS §1). [premium] affine le cas d'un refus serveur.
+  static String messageEchec({
+    required CauseTelechargement? cause,
+    required bool premium,
+  }) => switch (cause) {
+    CauseTelechargement.reseau =>
+      'Pas de connexion. Verifie ton reseau, puis reessaie.',
+    CauseTelechargement.stockagePlein =>
+      'Stockage plein. Libere de l\'espace, puis reessaie.',
+    CauseTelechargement.nonAutorise =>
+      premium
+          ? 'Ce document fait partie de l\'offre Premium.'
+          : 'Tu dois etre connecte pour telecharger ce document.',
+    CauseTelechargement.introuvable =>
+      'Document introuvable pour le moment. Reessaie plus tard.',
+    CauseTelechargement.inattendu ||
+    null => 'Le telechargement a echoue. Reessaie.',
+  };
+}
+
+/// La zone affichee quand aucun PDF n'est ouvert : selon l'etat du telechargement
+/// (a proposer / en cours / echec) et selon que l'eleve est connecte. Le fond gris
+/// neutre est le meme que celui du rendu PDF (maquette ecran 7).
+class _ZoneTelechargement extends StatelessWidget {
+  const _ZoneTelechargement({
+    required this.vue,
+    required this.tailleTexte,
+    required this.premium,
+    required this.estConnecte,
+    required this.onTelecharger,
+    required this.onAnnuler,
+    required this.onCreerCompte,
+  });
+
+  final VueTelechargement vue;
+  final String tailleTexte;
+  final bool premium;
+  final bool estConnecte;
+  final VoidCallback onTelecharger;
+  final VoidCallback onAnnuler;
+  final VoidCallback onCreerCompte;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     return ColoredBox(
       color: const Color(0xFFE4E7EE),
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: colorScheme.primaryContainer,
-                ),
-                child: Icon(
-                  Icons.cloud_download_outlined,
-                  size: 32,
-                  color: colorScheme.onPrimaryContainer,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                'Document pas encore sur l\'appareil',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Ce document n\'a pas encore ete telecharge. Le telechargement '
-                'arrivera bientot.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
+          child: switch (vue.etat) {
+            EtatTelechargement.enCours => _EnCours(
+              progression: vue.progression,
+              onAnnuler: onAnnuler,
+            ),
+            EtatTelechargement.echec => _Echec(
+              cause: vue.cause,
+              premium: premium,
+              onReessayer: onTelecharger,
+            ),
+            // `local` n'arrive jamais ici (le PDF s'affiche alors) ; `telechargeable`
+            // (et le defaut) : proposer le telechargement, ou inviter a s'inscrire.
+            _ =>
+              estConnecte
+                  ? _AProposer(
+                      tailleTexte: tailleTexte,
+                      onTelecharger: onTelecharger,
+                    )
+                  : _InviteCompte(onCreerCompte: onCreerCompte),
+          },
         ),
       ),
+    );
+  }
+}
+
+/// La pastille ronde d'entete, reprise de la maquette (ecran 7).
+class _Pastille extends StatelessWidget {
+  const _Pastille({required this.icone});
+
+  final IconData icone;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 70,
+      height: 70,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: colorScheme.primaryContainer,
+      ),
+      child: Icon(icone, size: 32, color: colorScheme.onPrimaryContainer),
+    );
+  }
+}
+
+/// Document telechargeable (eleve connecte) : titre de DISPONIBILITE + bouton qui
+/// annonce la taille (regle 2 du contrat hors-ligne : on sait ce que ca coute).
+class _AProposer extends StatelessWidget {
+  const _AProposer({required this.tailleTexte, required this.onTelecharger});
+
+  final String tailleTexte;
+  final VoidCallback onTelecharger;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const _Pastille(icone: Icons.cloud_download_outlined),
+        const SizedBox(height: 14),
+        Text(
+          'Document pas encore sur l\'appareil',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Telecharge-le pour le lire hors connexion, meme sans reseau.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 16),
+        BoutonPrimaireWidget(
+          libelle: 'Telecharger ($tailleTexte)',
+          onPressed: onTelecharger,
+          pleineLargeur: false,
+        ),
+      ],
+    );
+  }
+}
+
+/// Invite (« continuer sans compte ») : aucun telechargement possible (policy
+/// Storage), on propose de creer un compte. Meme titre que [_AProposer].
+class _InviteCompte extends StatelessWidget {
+  const _InviteCompte({required this.onCreerCompte});
+
+  final VoidCallback onCreerCompte;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const _Pastille(icone: Icons.cloud_download_outlined),
+        const SizedBox(height: 14),
+        Text(
+          'Document pas encore sur l\'appareil',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Cree un compte pour telecharger et lire ce document hors connexion.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 16),
+        BoutonPrimaireWidget(
+          libelle: 'Creer un compte',
+          onPressed: onCreerCompte,
+          pleineLargeur: false,
+        ),
+      ],
+    );
+  }
+}
+
+/// Telechargement en cours : barre de progression + pourcentage + Annuler.
+class _EnCours extends StatelessWidget {
+  const _EnCours({required this.progression, required this.onAnnuler});
+
+  final double progression;
+  final VoidCallback onAnnuler;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final pourcent = (progression.clamp(0.0, 1.0) * 100).round();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Telechargement en cours',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 16),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: progression.clamp(0.0, 1.0),
+            minHeight: 8,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '$pourcent %',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextButton(
+          style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+          onPressed: onAnnuler,
+          child: const Text('Annuler'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Echec du telechargement : message choisi par la cause + Reessayer.
+class _Echec extends StatelessWidget {
+  const _Echec({
+    required this.cause,
+    required this.premium,
+    required this.onReessayer,
+  });
+
+  final CauseTelechargement? cause;
+  final bool premium;
+  final VoidCallback onReessayer;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const _Pastille(icone: Icons.error_outline),
+        const SizedBox(height: 14),
+        Text(
+          'Le telechargement a echoue',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          LibellesTelechargement.messageEchec(cause: cause, premium: premium),
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 16),
+        BoutonPrimaireWidget(
+          libelle: 'Reessayer',
+          onPressed: onReessayer,
+          pleineLargeur: false,
+        ),
+      ],
     );
   }
 }
