@@ -7,14 +7,11 @@ import 'package:fayemath_academy/core/errors/echecs_authentification.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
 import 'package:fayemath_academy/domain/entities/matiere.dart';
-import 'package:fayemath_academy/domain/entities/serie.dart';
-import 'package:fayemath_academy/domain/usecases/programme_scolaire.dart';
 import 'package:fayemath_academy/domain/usecases/regroupement_par_strate.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
+import 'package:fayemath_academy/presentation/providers/bibliotheque_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
-import 'package:fayemath_academy/presentation/providers/choix_classe_provider.dart';
-import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 import 'package:fayemath_academy/presentation/widgets/bouton_primaire_widget.dart';
 
 /// Liste des chapitres d'une (classe, matiere), regroupes par strate (maquette
@@ -88,69 +85,20 @@ class ListeChapitresScreen extends ConsumerWidget {
     }
   }
 
-  /// Determine la (classe, matiere) a afficher.
-  ///
-  /// La classe vient de l'eleve : profil serveur s'il est connecte, choix local
-  /// s'il est invite. La MATIERE, elle, n'est stockee nulle part (Constat A,
-  /// etape 14 : `utilisateur` n'a pas de colonne matiere).
-  ///
-  /// SIMPLIFICATION ASSUMEE (option 1, decision Ousseynou 13/08/2026) : on ne
-  /// demande rien et on prend la 1re matiere AU PROGRAMME
-  /// (`ProgrammeScolaire`, toujours Mathematiques vu l'ordre du programme), MEME
-  /// chemin pour le connecte et l'invite. Tant que seule la 6e Maths a du contenu
-  /// (`BibliothequesPretes`), « deriver la matiere » et « honorer le choix
-  /// invite » sont indistinguables a l'observation : le double chemin ne se
-  /// justifierait par rien de verifiable. A REVOIR des qu'une 2e bibliotheque
-  /// (ex. Physique-chimie) aura du contenu reel — il faudra alors persister la
-  /// matiere choisie ou offrir un selecteur (meme esprit que le « a l'etape 18 »
-  /// de bibliotheques_pretes.dart).
+  /// Determine la (classe, matiere) a afficher, via le provider partage
+  /// [bibliothequeCouranteProvider] (extrait a l'etape 20 ; la regle « derive la
+  /// matiere » — option 1, etape 15 — y est documentee). On retombe sur les trois
+  /// etats d'affichage de cet ecran : chargement (y compris « pas de bibliotheque
+  /// resolue », la redirection s'en charge), erreur (catalogue injoignable et
+  /// absent du cache), ou (classe, matiere) prete.
   _Resolution _resoudreCible(WidgetRef ref) {
-    final matieresAsync = ref.watch(matieresProvider);
-    final matieres = matieresAsync.value;
-    if (matieres == null) {
-      return matieresAsync.hasError
-          ? const _CibleErreur()
-          : const _CibleEnChargement();
-    }
-
-    Classe? classe;
-    Serie? serie;
-    switch (ref.watch(etatAuthProvider)) {
-      case AuthInvite():
-        final choix = ref.watch(choixClasseProvider);
-        classe = choix.classe;
-        serie = choix.serie;
-      case AuthConnecte():
-        final profil = ref.watch(profilProvider);
-        if (profil is! ProfilResolu) return const _CibleEnChargement();
-        final classeId = profil.profil?.classeId;
-        if (classeId == null) return const _CibleEnChargement();
-        serie = profil.profil?.serie;
-        final classesAsync = ref.watch(classesProvider);
-        final classes = classesAsync.value;
-        if (classes == null) {
-          return classesAsync.hasError
-              ? const _CibleErreur()
-              : const _CibleEnChargement();
-        }
-        final trouvees = classes.where((c) => c.id == classeId);
-        classe = trouvees.isEmpty ? null : trouvees.first;
-      case AuthDeconnecte():
-        // La redirection empeche d'atterrir ici deconnecte ; on ne devine pas :
-        // etat neutre le temps que l'auth se stabilise.
-        return const _CibleEnChargement();
-    }
-
-    if (classe == null) return const _CibleEnChargement();
-
-    final autorisees = ProgrammeScolaire.matieresAutorisees(
-      classe: classe,
-      serie: serie,
-      catalogue: matieres,
-    );
-    if (autorisees.isEmpty) return const _CibleEnChargement();
-
-    return _CibleResolue(_Cible(classe: classe, matiere: autorisees.first));
+    final biblio = ref.watch(bibliothequeCouranteProvider);
+    return switch (biblio) {
+      AsyncData(:final value) when value != null =>
+        _CibleResolue(_Cible(classe: value.classe, matiere: value.matiere)),
+      AsyncError() => const _CibleErreur(),
+      _ => const _CibleEnChargement(),
+    };
   }
 }
 
