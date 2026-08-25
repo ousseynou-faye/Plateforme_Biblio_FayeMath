@@ -8,6 +8,7 @@ import 'package:fayemath_academy/domain/entities/type_ressource.dart';
 import 'package:fayemath_academy/domain/usecases/disponibilite_hors_ligne.dart';
 import 'package:fayemath_academy/presentation/providers/bibliotheque_provider.dart';
 import 'package:fayemath_academy/presentation/providers/mes_telechargements_provider.dart';
+import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
 
 /// Ecran « Mes telechargements » (maquette V2.1, ecran 8 « Mes documents
 /// hors-ligne »). Liste ce qui est REELLEMENT sur l'appareil, groupe par chapitre,
@@ -65,16 +66,63 @@ class _ApercuAsync extends ConsumerWidget {
       return const Center(child: CircularProgressIndicator());
     }
     if (apercu.estVide) return const _EtatVide();
-    return _Liste(apercu: apercu);
+    return _Liste(
+      apercu: apercu,
+      onSupprimer: (ressource) => _confirmerEtSupprimer(context, ref, ressource),
+    );
+  }
+
+  /// Supprime un document APRES une confirmation explicite : symetrique de la
+  /// regle 1 du contrat hors-ligne (rien ne se telecharge sans action explicite —
+  /// rien ne s'efface non plus). Seul le FICHIER local est supprime ; la ligne
+  /// `telechargement` n'est jamais touchee (le disque est la seule source de verite
+  /// de la presence locale). L'invalidation relit disque + catalogue : la ligne
+  /// disparait et l'anneau de couverture se recalcule.
+  Future<void> _confirmerEtSupprimer(
+    BuildContext context,
+    WidgetRef ref,
+    Ressource ressource,
+  ) async {
+    final confirme = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer ce document ?'),
+        content: const Text(
+          'Il ne sera plus lisible hors connexion. Tu pourras le retelecharger '
+          'quand tu veux.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    if (confirme != true) return;
+
+    await ref.read(telechargementRepositoryProvider).supprimer(ressource.id);
+    ref.invalidate(apercuHorsLigneProvider(cle));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('Document supprime')));
   }
 }
 
 /// La liste chargee : l'anneau de couverture, puis un en-tete par chapitre suivi de
 /// ses documents telecharges.
 class _Liste extends StatelessWidget {
-  const _Liste({required this.apercu});
+  const _Liste({required this.apercu, required this.onSupprimer});
 
   final ApercuHorsLigne apercu;
+
+  /// Appele quand l'eleve demande la suppression d'un document (via sa poubelle).
+  final void Function(Ressource ressource) onSupprimer;
 
   @override
   Widget build(BuildContext context) {
@@ -88,7 +136,10 @@ class _Liste extends StatelessWidget {
             titre: groupe.chapitre.titre,
           ),
           for (final document in groupe.documents)
-            _LigneDocument(ressource: document),
+            _LigneDocument(
+              ressource: document,
+              onSupprimer: () => onSupprimer(document),
+            ),
         ],
         const SizedBox(height: 12),
       ],
@@ -202,12 +253,14 @@ class _EnteteChapitre extends StatelessWidget {
   }
 }
 
-/// Une ligne de document telecharge : icone du type + libelle + taille. La
-/// suppression (icone poubelle) est ajoutee au Lot D ; ici, on affiche seulement.
+/// Une ligne de document telecharge : icone du type + libelle + taille, et une
+/// poubelle pour le retirer de l'appareil (cible tactile de 48 px, libelle lu par
+/// les lecteurs d'ecran via le tooltip).
 class _LigneDocument extends StatelessWidget {
-  const _LigneDocument({required this.ressource});
+  const _LigneDocument({required this.ressource, required this.onSupprimer});
 
   final Ressource ressource;
+  final VoidCallback onSupprimer;
 
   @override
   Widget build(BuildContext context) {
@@ -215,7 +268,7 @@ class _LigneDocument extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     return Container(
       constraints: const BoxConstraints(minHeight: 56),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
@@ -247,6 +300,12 @@ class _LigneDocument extends StatelessWidget {
             style: theme.textTheme.bodySmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Supprimer ce document',
+            color: colorScheme.onSurfaceVariant,
+            onPressed: onSupprimer,
           ),
         ],
       ),

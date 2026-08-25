@@ -8,11 +8,29 @@ import 'package:fayemath_academy/domain/entities/cycle.dart';
 import 'package:fayemath_academy/domain/entities/matiere.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/domain/entities/type_ressource.dart';
+import 'package:fayemath_academy/domain/repositories/telechargement_repository.dart';
 import 'package:fayemath_academy/domain/usecases/disponibilite_hors_ligne.dart';
 import 'package:fayemath_academy/domain/usecases/regroupement_documents_hors_ligne.dart';
 import 'package:fayemath_academy/presentation/providers/bibliotheque_provider.dart';
 import 'package:fayemath_academy/presentation/providers/mes_telechargements_provider.dart';
+import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
 import 'package:fayemath_academy/presentation/screens/mes_telechargements_screen.dart';
+
+/// Espion : capture les ids passes a [supprimer] pour verifier le cablage.
+class _SpyTelechargementRepository implements TelechargementRepository {
+  final List<String> supprimes = [];
+
+  @override
+  Future<void> supprimer(String ressourceId) async => supprimes.add(ressourceId);
+
+  @override
+  Future<String?> cheminLocalSiPresent(String ressourceId) async => null;
+  @override
+  Future<List<Ressource>> listerPresents() async => const [];
+  @override
+  Stream<double> telecharger(Ressource ressource) =>
+      const Stream<double>.empty();
+}
 
 const _classe = Classe(id: 'c-6e', nom: '6e', cycle: Cycle.college, ordre: 1);
 const _maths = Matiere(id: 'm-maths', nom: 'Mathematiques');
@@ -45,7 +63,11 @@ Ressource _cours() => const Ressource(
 /// Monte l'ecran avec une bibliotheque resolue et un apercu injecte : on teste le
 /// RENDU (l'anneau, le compteur, les groupes), la logique pure etant couverte par
 /// ses propres tests.
-Future<void> _monter(WidgetTester tester, ApercuHorsLigne apercu) async {
+Future<void> _monter(
+  WidgetTester tester,
+  ApercuHorsLigne apercu, {
+  TelechargementRepository? telechargement,
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -53,6 +75,9 @@ Future<void> _monter(WidgetTester tester, ApercuHorsLigne apercu) async {
           const AsyncData<BibliothequeCourante?>(_biblio),
         ),
         apercuHorsLigneProvider.overrideWith((ref, cle) async => apercu),
+        telechargementRepositoryProvider.overrideWithValue(
+          telechargement ?? _SpyTelechargementRepository(),
+        ),
       ],
       child: const MaterialApp(home: MesTelechargementsScreen()),
     ),
@@ -93,5 +118,42 @@ void main() {
 
     expect(find.text('Aucun document hors-ligne'), findsOneWidget);
     expect(find.text('Chapitre 1 · Les entiers naturels'), findsNothing);
+  });
+
+  ApercuHorsLigne apercuAvecCours() => ApercuHorsLigne(
+    ratio: const RatioHorsLigne(chapitresHorsLigne: 1, chapitresTotal: 2),
+    groupes: [
+      GroupeTelechargements(chapitre: _chapitre1, documents: [_cours()]),
+    ],
+  );
+
+  testWidgets('poubelle -> confirmer -> supprime le document + SnackBar', (
+    tester,
+  ) async {
+    final spy = _SpyTelechargementRepository();
+    await _monter(tester, apercuAvecCours(), telechargement: spy);
+
+    await tester.tap(find.byTooltip('Supprimer ce document'));
+    await tester.pumpAndSettle();
+    expect(find.text('Supprimer ce document ?'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Supprimer'));
+    await tester.pumpAndSettle();
+
+    expect(spy.supprimes, ['r-cours']);
+    expect(find.text('Document supprime'), findsOneWidget);
+  });
+
+  testWidgets('poubelle -> annuler -> ne supprime rien', (tester) async {
+    final spy = _SpyTelechargementRepository();
+    await _monter(tester, apercuAvecCours(), telechargement: spy);
+
+    await tester.tap(find.byTooltip('Supprimer ce document'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Annuler'));
+    await tester.pumpAndSettle();
+
+    expect(spy.supprimes, isEmpty);
+    expect(find.text('Supprimer ce document ?'), findsNothing);
   });
 }
