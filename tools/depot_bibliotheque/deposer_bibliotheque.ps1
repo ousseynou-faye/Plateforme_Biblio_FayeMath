@@ -58,6 +58,10 @@ if ($Upload) {
   if ([string]::IsNullOrWhiteSpace($env:SUPABASE_SERVICE_ROLE_KEY)) {
     throw "Variable SUPABASE_SERVICE_ROLE_KEY absente. Colle ta cle service_role dans le shell (jamais dans un fichier)."
   }
+  # Nettoyage automatique : un copier-coller depuis un dashboard web embarque
+  # parfois un retour a la ligne invisible, que PowerShell refuse ensuite.
+  $supabaseUrl = ($env:SUPABASE_URL -replace '[\r\n]', '').Trim()
+  $serviceKey  = ($env:SUPABASE_SERVICE_ROLE_KEY -replace '[\r\n]', '').Trim()
 }
 
 # --- Regles de mapping (identiques a la migration 09) -------------------------
@@ -118,11 +122,11 @@ foreach ($l in $lignes) {
 
   if ($Upload -and $existe) {
     # POST /storage/v1/object/{bucket}/{path} - upload binaire, upsert actif.
-    $uri = "$($env:SUPABASE_URL.TrimEnd('/'))/storage/v1/object/$bucket/$dest"
+    $uri = "$($supabaseUrl.TrimEnd('/'))/storage/v1/object/$bucket/$dest"
     try {
       Invoke-WebRequest -Method Post -Uri $uri -InFile $src -ContentType 'application/pdf' `
         -Headers @{
-          Authorization = "Bearer $($env:SUPABASE_SERVICE_ROLE_KEY)"
+          Authorization = "Bearer $serviceKey"
           'x-upsert'    = 'true'
         } | Out-Null
       $ok++
