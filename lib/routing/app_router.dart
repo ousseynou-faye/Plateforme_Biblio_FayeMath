@@ -14,12 +14,28 @@ import 'package:fayemath_academy/presentation/screens/demarrage_screen.dart';
 import 'package:fayemath_academy/presentation/screens/detail_chapitre_screen.dart';
 import 'package:fayemath_academy/presentation/screens/lecteur_document_screen.dart';
 import 'package:fayemath_academy/presentation/screens/liste_chapitres_screen.dart';
+import 'package:fayemath_academy/presentation/screens/mes_telechargements_screen.dart';
+import 'package:fayemath_academy/presentation/screens/profil_screen.dart';
+import 'package:fayemath_academy/presentation/screens/tableau_bord_screen.dart';
+import 'package:fayemath_academy/presentation/widgets/coquille_onglets.dart';
 
 /// Chemins internes de navigation.
 const cheminDemarrage = '/demarrage';
 const cheminConnexion = '/connexion';
 const cheminChoixClasse = '/choix-classe';
+
+/// L'arrivee d'un eleve ayant droit au contenu : l'onglet « Cours » (la liste des
+/// chapitres). C'est la cible de redirection ([_cibleNavigation]). L'onglet
+/// « Accueil » (tableau de bord) est [cheminTableauBord], distinct : atterrir sur
+/// un tableau de bord encore vide serait une regression (l'arrivee basculera dessus
+/// quand il existera, etape 22).
 const cheminAccueil = '/';
+
+/// Les trois autres racines d'onglet de la coquille (barre du bas a 4 onglets).
+const cheminTableauBord = '/accueil';
+const cheminMesTelechargements = '/mes-telechargements';
+const cheminProfil = '/profil';
+
 const cheminChapitre = '/chapitre';
 
 /// Nom de la route de detail d'un chapitre. La liste ouvre cet ecran par
@@ -81,10 +97,49 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: cheminChoixClasse,
         builder: (context, state) => const ChoixClasseScreen(),
       ),
-      GoRoute(
-        path: cheminAccueil,
-        builder: (context, state) => const ListeChapitresScreen(),
+      // La coquille a onglets (barre du bas a 4 onglets). Chaque onglet garde sa
+      // pile ; l'ordre des branches EST l'ordre de la barre (Accueil, Cours,
+      // Hors-ligne, Profil), a garder synchrone avec CoquilleOnglets.
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) =>
+            CoquilleOnglets(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: cheminTableauBord,
+                builder: (context, state) => const TableauBordScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: cheminAccueil,
+                builder: (context, state) => const ListeChapitresScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: cheminMesTelechargements,
+                builder: (context, state) => const MesTelechargementsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: cheminProfil,
+                builder: (context, state) => const ProfilScreen(),
+              ),
+            ],
+          ),
+        ],
       ),
+      // Detail et lecteur restent des routes RACINE (hors coquille) : elles se
+      // poussent AU-DESSUS de la barre d'onglets (plein ecran), fidele a la maquette.
       GoRoute(
         name: nomRouteChapitre,
         path: '$cheminChapitre/:chapitreId',
@@ -124,10 +179,18 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-/// Les emplacements de la « zone contenu » : l'accueil et le detail d'un
-/// chapitre. Sert au `redirect` a ne pas rejeter un sous-ecran du contenu.
+/// Les emplacements de la « zone contenu » : les quatre racines d'onglet de la
+/// coquille ET le detail / lecteur d'un chapitre. Sert au `redirect` a ne pas
+/// rejeter un ayant droit qui change d'onglet ou ouvre un sous-ecran du contenu
+/// (sa cible reste l'accueil ; sans cette exception, chaque changement d'onglet
+/// rebondirait vers l'accueil). Un eleve SANS droit (deconnecte / sans classe) a,
+/// lui, une cible differente : il reste redirige, cette exception ne s'applique pas.
 bool _estZoneContenu(String emplacement) =>
-    emplacement == cheminAccueil || emplacement.startsWith('$cheminChapitre/');
+    emplacement == cheminAccueil ||
+    emplacement == cheminTableauBord ||
+    emplacement == cheminMesTelechargements ||
+    emplacement == cheminProfil ||
+    emplacement.startsWith('$cheminChapitre/');
 
 /// Ou l'utilisateur doit-il se trouver, selon son etat d'auth et — s'il est
 /// connecte — l'etat de son profil. Les deux `switch` sont exhaustifs (types

@@ -32,6 +32,7 @@ import 'package:fayemath_academy/presentation/providers/ressource_provider.dart'
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
 import 'package:fayemath_academy/presentation/screens/detail_chapitre_screen.dart';
 import 'package:fayemath_academy/presentation/screens/lecteur_document_screen.dart';
+import 'package:fayemath_academy/routing/app_router.dart';
 
 /// Faux repository d'auth : « connecte » si [session] est non nul.
 class _FauxAuthRepository implements AuthRepository {
@@ -488,6 +489,83 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(LecteurDocumentScreen), findsNothing);
+      expect(find.text('Ta classe'), findsOneWidget);
+    },
+  );
+
+  // --- Coquille a onglets (etape 20) ----------------------------------------
+
+  testWidgets('connecte AVEC classe : la barre a 4 onglets enveloppe l\'arrivee', (
+    tester,
+  ) async {
+    await monterApp(
+      tester,
+      auth: _FauxAuthRepository(
+        session: const SessionAuth(utilisateurId: 'u1'),
+      ),
+      catalogue: _catalogue,
+      profil: _FauxProfilRepository(
+        profil: Utilisateur(
+          id: 'u1',
+          classeId: 'c-6e',
+          serie: null,
+          creeLe: DateTime(2026, 8, 13),
+        ),
+      ),
+    );
+
+    // La coquille enveloppe l'arrivee, et l'onglet actif est « Cours » (la liste
+    // des chapitres, ici en etat vide) et non « Accueil » (le tableau de bord).
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text('Hors-ligne'), findsOneWidget);
+    expect(find.text('Bientot disponible'), findsOneWidget);
+  });
+
+  testWidgets(
+    'deconnecte : acces direct a /mes-telechargements -> renvoye a l\'auth',
+    (tester) async {
+      await monterApp(tester, auth: _FauxAuthRepository());
+      expect(
+        find.widgetWithText(FilledButton, 'Creer mon compte'),
+        findsOneWidget,
+      );
+
+      tester.element(find.byType(Scaffold).first).go(cheminMesTelechargements);
+      await tester.pumpAndSettle();
+
+      // Ni la coquille ni ses onglets : l'eleve sans droit reste a l'auth.
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(
+        find.widgetWithText(FilledButton, 'Creer mon compte'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'sans classe : acces direct a /mes-telechargements -> renvoye au choix',
+    (tester) async {
+      await monterApp(
+        tester,
+        auth: _FauxAuthRepository(
+          session: const SessionAuth(utilisateurId: 'u1'),
+        ),
+        catalogue: _catalogue,
+        profil: _FauxProfilRepository(
+          profil: Utilisateur(
+            id: 'u1',
+            classeId: null,
+            serie: null,
+            creeLe: DateTime(2026, 8, 13),
+          ),
+        ),
+      );
+      expect(find.text('Ta classe'), findsOneWidget);
+
+      tester.element(find.byType(Scaffold).first).go(cheminMesTelechargements);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NavigationBar), findsNothing);
       expect(find.text('Ta classe'), findsOneWidget);
     },
   );
