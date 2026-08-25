@@ -69,6 +69,7 @@ class _ApercuAsync extends ConsumerWidget {
     return _Liste(
       apercu: apercu,
       onSupprimer: (ressource) => _confirmerEtSupprimer(context, ref, ressource),
+      onToutSupprimer: () => _confirmerToutSupprimer(context, ref),
     );
   }
 
@@ -112,17 +113,79 @@ class _ApercuAsync extends ConsumerWidget {
       ..hideCurrentSnackBar()
       ..showSnackBar(const SnackBar(content: Text('Document supprime')));
   }
+
+  /// Supprime TOUS les documents presents (maquette ecran 16 « Supprimer tous les
+  /// telechargements »), apres confirmation nommee. Meme regle que la suppression
+  /// par ligne : action explicite, fichiers seuls (jamais les lignes
+  /// `telechargement`), confirmer-avant (pas d'undo qui re-telechargerait en douce).
+  Future<void> _confirmerToutSupprimer(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final apercu = ref.read(apercuHorsLigneProvider(cle)).value;
+    if (apercu == null || apercu.estVide) return;
+    final ids = [
+      for (final groupe in apercu.groupes)
+        for (final document in groupe.documents) document.id,
+    ];
+
+    final confirme = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tout supprimer ?'),
+        content: Text(
+          ids.length == 1
+              ? 'Le document sera retire de l\'appareil. Tu pourras le '
+                    'retelecharger quand tu veux.'
+              : 'Les ${ids.length} documents seront retires de l\'appareil. Tu '
+                    'pourras les retelecharger quand tu veux.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    if (confirme != true) return;
+
+    final repo = ref.read(telechargementRepositoryProvider);
+    for (final id in ids) {
+      await repo.supprimer(id);
+    }
+    ref.invalidate(apercuHorsLigneProvider(cle));
+    if (!context.mounted) return;
+    final message = ids.length == 1
+        ? 'Document supprime'
+        : 'Documents supprimes';
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 }
 
 /// La liste chargee : l'anneau de couverture, puis un en-tete par chapitre suivi de
 /// ses documents telecharges.
 class _Liste extends StatelessWidget {
-  const _Liste({required this.apercu, required this.onSupprimer});
+  const _Liste({
+    required this.apercu,
+    required this.onSupprimer,
+    required this.onToutSupprimer,
+  });
 
   final ApercuHorsLigne apercu;
 
   /// Appele quand l'eleve demande la suppression d'un document (via sa poubelle).
   final void Function(Ressource ressource) onSupprimer;
+
+  /// Appele quand l'eleve demande a tout supprimer (« Gerer tout mon espace
+  /// hors-ligne » de la maquette ecran 8).
+  final VoidCallback onToutSupprimer;
 
   @override
   Widget build(BuildContext context) {
@@ -130,6 +193,18 @@ class _Liste extends StatelessWidget {
       padding: EdgeInsets.zero,
       children: [
         _EnteteCompletion(ratio: apercu.ratio),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+            child: TextButton.icon(
+              style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+              onPressed: onToutSupprimer,
+              icon: const Icon(Icons.delete_sweep_outlined, size: 20),
+              label: const Text('Tout supprimer'),
+            ),
+          ),
+        ),
         for (final groupe in apercu.groupes) ...[
           _EnteteChapitre(
             numero: groupe.chapitre.numero,

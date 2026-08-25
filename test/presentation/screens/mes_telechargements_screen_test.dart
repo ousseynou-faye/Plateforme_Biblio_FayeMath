@@ -60,6 +60,20 @@ Ressource _cours() => const Ressource(
   ordre: 1,
 );
 
+Ressource _resume() => const Ressource(
+  id: 'r-resume',
+  chapitreId: 'ch1',
+  classeId: null,
+  matiereId: null,
+  type: TypeRessource.resume,
+  titre: 'Methodes',
+  tailleOctets: 20000,
+  premium: false,
+  version: 1,
+  cheminStorage: '6e/mathematiques/01/resume.pdf',
+  ordre: 2,
+);
+
 /// Monte l'ecran avec une bibliotheque resolue et un apercu injecte : on teste le
 /// RENDU (l'anneau, le compteur, les groupes), la logique pure etant couverte par
 /// ses propres tests.
@@ -155,5 +169,34 @@ void main() {
 
     expect(spy.supprimes, isEmpty);
     expect(find.text('Supprimer ce document ?'), findsNothing);
+  });
+
+  testWidgets('Tout supprimer -> confirmer -> supprime tous les documents', (
+    tester,
+  ) async {
+    final spy = _SpyTelechargementRepository();
+    await _monter(
+      tester,
+      ApercuHorsLigne(
+        ratio: const RatioHorsLigne(chapitresHorsLigne: 0, chapitresTotal: 2),
+        groupes: [
+          GroupeTelechargements(
+            chapitre: _chapitre1,
+            documents: [_cours(), _resume()],
+          ),
+        ],
+      ),
+      telechargement: spy,
+    );
+
+    await tester.tap(find.widgetWithText(TextButton, 'Tout supprimer'));
+    await tester.pumpAndSettle();
+    expect(find.text('Tout supprimer ?'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Supprimer'));
+    await tester.pumpAndSettle();
+
+    expect(spy.supprimes, ['r-cours', 'r-resume']);
+    expect(find.text('Documents supprimes'), findsOneWidget);
   });
 }
