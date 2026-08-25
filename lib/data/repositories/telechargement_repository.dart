@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show File, SocketException;
+import 'dart:io' show Directory, File, FileSystemException, SocketException;
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fayemath_academy/core/errors/echec_telechargement.dart';
 import 'package:fayemath_academy/core/telechargement/chemins_telechargement.dart';
 import 'package:fayemath_academy/data/local/base_locale.dart';
+import 'package:fayemath_academy/data/models/ressource_model.dart';
 import 'package:fayemath_academy/data/models/telechargement_model.dart';
 import 'package:fayemath_academy/data/remote/telechargeur_fichier.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
@@ -59,6 +60,52 @@ class TelechargementRepositoryStorage implements TelechargementRepository {
     final racine = await _racinePrivee();
     final chemin = CheminsTelechargement.fichierFinal(racine, ressourceId);
     return await File(chemin).exists() ? chemin : null;
+  }
+
+  @override
+  Future<List<Ressource>> listerPresents() async {
+    final racine = await _racinePrivee();
+    final dossier = Directory(CheminsTelechargement.dossier(racine));
+    // Aucun telechargement encore : dossier absent = liste vide, pas une erreur.
+    if (!await dossier.exists()) return const [];
+
+    // Le DISQUE est la source de verite : on scanne les fichiers finaux (.pdf) et
+    // on decode leur ressourceId. Les `.partiel` sont ecartes par le decodeur.
+    final ids = <String>[];
+    await for (final entite in dossier.list()) {
+      if (entite is! File) continue;
+      final nom = entite.uri.pathSegments.last;
+      final id = CheminsTelechargement.ressourceIdDepuisNomFichier(nom);
+      if (id != null) ids.add(id);
+    }
+    if (ids.isEmpty) return const [];
+
+    // Jointure avec le cache local (lecture 100 % hors-ligne) : on n'affiche que
+    // les ressources connues ; un fichier orphelin (cache purge) est ignore.
+    final lignes = await (_base.select(
+      _base.ressources,
+    )..where((r) => r.id.isIn(ids))).get();
+    return lignes.map(RessourceModel.depuisLigne).toList();
+  }
+
+  @override
+  Future<void> supprimer(String ressourceId) async {
+    final racine = await _racinePrivee();
+    final fichier = File(
+      CheminsTelechargement.fichierFinal(racine, ressourceId),
+    );
+    try {
+      if (await fichier.exists()) await fichier.delete();
+    } on FileSystemException catch (erreur) {
+      // Best-effort : si le fichier resiste, on le trace en debug plutot que de
+      // planter l'ecran. La ligne `telechargement` n'est jamais touchee (le
+      // disque est la seule source de verite de la presence locale).
+      if (kDebugMode) {
+        debugPrint(
+          '[telechargement] suppression impossible : ${erreur.runtimeType}',
+        );
+      }
+    }
   }
 
   @override

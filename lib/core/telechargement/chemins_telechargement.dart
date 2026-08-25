@@ -45,4 +45,19 @@ abstract final class CheminsTelechargement {
   /// deja appliquee en ligne par le lecteur (etape 17), pour une seule source.
   static bool estAssetEmbarque(String? cheminStorage) =>
       cheminStorage != null && cheminStorage.startsWith('assets/');
+
+  /// L'inverse de [fichierFinal] : le `ressourceId` porte par un NOM de fichier
+  /// (sans dossier), ou `null` si ce nom n'est pas un PDF telecharge complet
+  /// (etape 20, pour lister ce qui est sur l'appareil). Fonction PURE : le scan
+  /// du dossier est fait ailleurs (couche `data/`), ici on ne fait que decoder
+  /// un nom.
+  ///
+  /// Seuls les fichiers FINAUX comptent : un `<id>.pdf.partiel` (transfert
+  /// interrompu) ne se termine pas par `.pdf`, il est donc ecarte — un partiel
+  /// n'est pas « sur l'appareil » (ecriture atomique, contrat hors-ligne regle 3).
+  static String? ressourceIdDepuisNomFichier(String nomFichier) {
+    if (!nomFichier.endsWith(_extension)) return null;
+    final id = nomFichier.substring(0, nomFichier.length - _extension.length);
+    return id.isEmpty ? null : id;
+  }
 }

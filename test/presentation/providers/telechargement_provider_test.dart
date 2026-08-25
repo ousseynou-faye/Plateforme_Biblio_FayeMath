@@ -22,6 +22,13 @@ class _FauxTelechargementRepository implements TelechargementRepository {
 
   @override
   Stream<double> telecharger(Ressource ressource) => controleur.stream;
+
+  // Non exercees par les tests de ce provider (liste/suppression = ecran 8).
+  @override
+  Future<List<Ressource>> listerPresents() async => const [];
+
+  @override
+  Future<void> supprimer(String ressourceId) async {}
 }
 
 /// Une ressource minimale pour les tests (un cours de chapitre).

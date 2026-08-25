@@ -60,5 +60,40 @@ void main() {
         expect(CheminsTelechargement.estAssetEmbarque(null), isFalse);
       });
     });
+
+    group('ressourceIdDepuisNomFichier', () {
+      test('un nom <id>.pdf rend l\'id', () {
+        expect(
+          CheminsTelechargement.ressourceIdDepuisNomFichier('$id.pdf'),
+          id,
+        );
+      });
+
+      test('c\'est l\'inverse exact de fichierFinal', () {
+        final nom = CheminsTelechargement.fichierFinal(
+          racine,
+          id,
+        ).split('/').last;
+        expect(CheminsTelechargement.ressourceIdDepuisNomFichier(nom), id);
+      });
+
+      test('un fichier partiel (transfert interrompu) est ecarte', () {
+        expect(
+          CheminsTelechargement.ressourceIdDepuisNomFichier('$id.pdf.partiel'),
+          isNull,
+        );
+      });
+
+      test('un fichier non-.pdf est ecarte', () {
+        expect(
+          CheminsTelechargement.ressourceIdDepuisNomFichier('fayemath.sqlite'),
+          isNull,
+        );
+      });
+
+      test('un nom reduit a l\'extension (id vide) est ecarte', () {
+        expect(CheminsTelechargement.ressourceIdDepuisNomFichier('.pdf'), isNull);
+      });
+    });
   });
 }

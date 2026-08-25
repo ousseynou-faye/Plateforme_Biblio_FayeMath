@@ -46,6 +46,13 @@ class _FauxTelechargementRepository implements TelechargementRepository {
   @override
   Stream<double> telecharger(Ressource ressource) =>
       const Stream<double>.empty();
+
+  // Non exercees par les tests du lecteur (liste/suppression = ecran 8).
+  @override
+  Future<List<Ressource>> listerPresents() async => const [];
+
+  @override
+  Future<void> supprimer(String ressourceId) async {}
 }
 
 /// Faux repository d'auth minimal : une session presente = eleve connecte.

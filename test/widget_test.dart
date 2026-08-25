@@ -134,6 +134,13 @@ class _FauxTelechargementRepository implements TelechargementRepository {
   @override
   Stream<double> telecharger(Ressource ressource) =>
       const Stream<double>.empty();
+
+  // Non exercees par les tests de navigation (liste/suppression = ecran 8).
+  @override
+  Future<List<Ressource>> listerPresents() async => const [];
+
+  @override
+  Future<void> supprimer(String ressourceId) async {}
 }
 
 const _maths = Matiere(id: 'm-maths', nom: 'Mathématiques');
