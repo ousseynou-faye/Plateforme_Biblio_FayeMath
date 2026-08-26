@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fayemath_academy/core/errors/echec_telechargement.dart';
+import 'package:fayemath_academy/core/network/etat_reseau.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
 import 'package:fayemath_academy/domain/entities/cycle.dart';
@@ -23,6 +24,7 @@ import 'package:fayemath_academy/domain/repositories/catalogue_repository.dart';
 import 'package:fayemath_academy/domain/repositories/telechargement_repository.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
+import 'package:fayemath_academy/presentation/providers/etat_reseau_provider.dart';
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
 import 'package:fayemath_academy/presentation/screens/lecteur_document_screen.dart';
 
@@ -33,9 +35,9 @@ class _FauxCatalogueRepository implements CatalogueRepository {
   final List<Matiere> lesMatieres;
 
   @override
-  Future<List<Classe>> classes() async => lesClasses;
+  Stream<List<Classe>> observerClasses() => Stream.value(lesClasses);
   @override
-  Future<List<Matiere>> matieres() async => lesMatieres;
+  Stream<List<Matiere>> observerMatieres() => Stream.value(lesMatieres);
 }
 
 /// Faux moteur de telechargement : aucun fichier sur le disque, un flux inerte.
@@ -118,6 +120,9 @@ Future<void> _monter(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        etatReseauProvider.overrideWith(
+          (ref) => const Stream<EtatReseau>.empty(),
+        ),
         catalogueRepositoryProvider.overrideWithValue(
           _FauxCatalogueRepository(const [_classe6e], const [_maths]),
         ),

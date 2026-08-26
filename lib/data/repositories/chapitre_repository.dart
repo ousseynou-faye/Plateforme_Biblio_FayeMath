@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:fayemath_academy/core/network/limiteur_resynchro.dart';
 import 'package:fayemath_academy/data/local/base_locale.dart';
 import 'package:fayemath_academy/data/models/chapitre_model.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
@@ -24,26 +25,45 @@ import 'package:fayemath_academy/domain/repositories/chapitre_repository.dart';
 /// ravale l'echec (trace en debug), jamais un `catch` silencieux (CONVENTIONS §5).
 ///
 /// Le cache est un miroir RECONSTRUCTIBLE : la resynchro remplace UNIQUEMENT les
-/// lignes de ce couple (delete cible + insert), sans toucher aux chapitres des
-/// autres (classe, matiere) deja en cache.
+/// lignes de ce couple (delete cible + insert), dans une TRANSACTION pour que les
+/// flux `.watch()` (etape 21) ne voient pas l'etat vide intermediaire, sans
+/// toucher aux chapitres des autres (classe, matiere) deja en cache.
 class ChapitreRepositoryOfflineFirst implements ChapitreRepository {
   ChapitreRepositoryOfflineFirst(this._base, this._supabase);
 
   final BaseLocale _base;
   final SupabaseClient _supabase;
 
+  /// Garde anti-rafale des resynchros en arriere-plan (etape 21, Point 6), cle par
+  /// couple (classe, matiere).
+  final LimiteurResynchro _limiteur = LimiteurResynchro();
+
   @override
-  Future<List<Chapitre>> chapitresDe({
+  Stream<List<Chapitre>> observerChapitresDe({
     required String classeId,
     required String matiereId,
-  }) async {
+  }) async* {
+    // Cache non vide : rendu immediat + resynchro en fond sous garde anti-rafale.
+    // Cache vide (contenu pas encore synchronise) : on attend une synchro d'abord,
+    // comme le chemin `Future`.
+    final cle = '$classeId/$matiereId';
     final local = await _chapitresLocaux(classeId, matiereId);
     if (local.isNotEmpty) {
-      unawaited(_synchroniserChapitres(classeId, matiereId));
-      return local;
+      if (_limiteur.doitResynchroniser(cle)) {
+        unawaited(_synchroniserChapitres(classeId, matiereId));
+      }
+    } else {
+      await _synchroniserChapitres(classeId, matiereId);
     }
-    await _synchroniserChapitres(classeId, matiereId);
-    return _chapitresLocaux(classeId, matiereId);
+    yield* (_base.select(_base.chapitres)
+          ..where((c) => c.classeId.equals(classeId))
+          ..where((c) => c.matiereId.equals(matiereId)))
+        .watch()
+        .map(
+          (lignes) =>
+              lignes.map(ChapitreModel.depuisLigne).toList()
+                ..sort((a, b) => a.ordre.compareTo(b.ordre)),
+        );
   }
 
   // --- Lecture du cache local (l'ordre d'affichage est garanti ici) -----------
@@ -65,10 +85,7 @@ class ChapitreRepositoryOfflineFirst implements ChapitreRepository {
 
   // --- Resynchronisation depuis Supabase (best-effort, ciblee sur le couple) --
 
-  Future<void> _synchroniserChapitres(
-    String classeId,
-    String matiereId,
-  ) async {
+  Future<void> _synchroniserChapitres(String classeId, String matiereId) async {
     try {
       final lignes = await _supabase
           .from('chapitre')
@@ -77,17 +94,20 @@ class ChapitreRepositoryOfflineFirst implements ChapitreRepository {
           .eq('matiere_id', matiereId);
       final chapitresServeur = lignes.map(ChapitreModel.depuisJson).toList();
 
-      // Remplacement CIBLE : on ne purge que ce couple, pas toute la table.
-      await (_base.delete(_base.chapitres)
-            ..where((c) => c.classeId.equals(classeId))
-            ..where((c) => c.matiereId.equals(matiereId)))
-          .go();
-      await _base.batch(
-        (b) => b.insertAll(
-          _base.chapitres,
-          chapitresServeur.map(ChapitreModel.versCompanion),
-        ),
-      );
+      // Remplacement CIBLE (on ne purge que ce couple) dans UNE transaction :
+      // `.watch()` n'emet qu'au commit, jamais l'etat vide du delete.
+      await _base.transaction(() async {
+        await (_base.delete(_base.chapitres)
+              ..where((c) => c.classeId.equals(classeId))
+              ..where((c) => c.matiereId.equals(matiereId)))
+            .go();
+        await _base.batch(
+          (b) => b.insertAll(
+            _base.chapitres,
+            chapitresServeur.map(ChapitreModel.versCompanion),
+          ),
+        );
+      });
     } catch (erreur) {
       _tracerSyncRavalee(classeId, matiereId, erreur);
     }

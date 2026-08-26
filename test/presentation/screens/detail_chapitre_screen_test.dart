@@ -7,10 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:fayemath_academy/core/network/etat_reseau.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/domain/entities/type_ressource.dart';
 import 'package:fayemath_academy/domain/repositories/ressource_repository.dart';
+import 'package:fayemath_academy/presentation/providers/etat_reseau_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
 import 'package:fayemath_academy/presentation/screens/detail_chapitre_screen.dart';
 
@@ -20,9 +22,9 @@ class _FauxRessourceRepository implements RessourceRepository {
   final List<Ressource> ressources;
 
   @override
-  Future<List<Ressource>> ressourcesDuChapitre({
+  Stream<List<Ressource>> observerRessourcesDuChapitre({
     required String chapitreId,
-  }) async => ressources;
+  }) => Stream.value(ressources);
 }
 
 const _chapitre = Chapitre(
@@ -61,13 +63,14 @@ Future<void> _monter(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        etatReseauProvider.overrideWith(
+          (ref) => const Stream<EtatReseau>.empty(),
+        ),
         ressourceRepositoryProvider.overrideWithValue(
           _FauxRessourceRepository(ressources),
         ),
       ],
-      child: const MaterialApp(
-        home: DetailChapitreScreen(chapitre: _chapitre),
-      ),
+      child: const MaterialApp(home: DetailChapitreScreen(chapitre: _chapitre)),
     ),
   );
   await tester.pumpAndSettle();

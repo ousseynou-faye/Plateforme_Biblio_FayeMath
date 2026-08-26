@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:fayemath_academy/core/network/etat_reseau.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
 import 'package:fayemath_academy/domain/entities/cycle.dart';
@@ -27,6 +28,7 @@ import 'package:fayemath_academy/app.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
+import 'package:fayemath_academy/presentation/providers/etat_reseau_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
@@ -69,9 +71,9 @@ class _FauxCatalogueRepository implements CatalogueRepository {
   final List<Matiere> lesMatieres;
 
   @override
-  Future<List<Classe>> classes() async => lesClasses;
+  Stream<List<Classe>> observerClasses() => Stream.value(lesClasses);
   @override
-  Future<List<Matiere>> matieres() async => lesMatieres;
+  Stream<List<Matiere>> observerMatieres() => Stream.value(lesMatieres);
 }
 
 /// Faux profil : renvoie [profil] tel quel ; l'enregistrement le remplace.
@@ -82,6 +84,10 @@ class _FauxProfilRepository implements ProfilRepository {
 
   @override
   Future<Utilisateur?> profilCourant(String utilisateurId) async => profil;
+
+  @override
+  Stream<Utilisateur?> observerProfilCourant(String utilisateurId) =>
+      Stream.value(profil);
 
   @override
   Future<void> definirClasseEtSerie({
@@ -107,10 +113,10 @@ class _FauxChapitreRepository implements ChapitreRepository {
   final List<Chapitre> chapitres;
 
   @override
-  Future<List<Chapitre>> chapitresDe({
+  Stream<List<Chapitre>> observerChapitresDe({
     required String classeId,
     required String matiereId,
-  }) async => chapitres;
+  }) => Stream.value(chapitres);
 }
 
 /// Faux repository de ressources : renvoie [ressources] tel quel (defaut vide ->
@@ -121,9 +127,9 @@ class _FauxRessourceRepository implements RessourceRepository {
   final List<Ressource> ressources;
 
   @override
-  Future<List<Ressource>> ressourcesDuChapitre({
+  Stream<List<Ressource>> observerRessourcesDuChapitre({
     required String chapitreId,
-  }) async => ressources;
+  }) => Stream.value(ressources);
 }
 
 /// Faux moteur de telechargement : rien sur le disque, flux inerte (la
@@ -163,6 +169,12 @@ Future<void> monterApp(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        // Le vrai detecteur reseau depend du plugin natif connectivity_plus,
+        // absent en test : flux vide -> le bandeau rend rien (SizedBox.shrink),
+        // sans interferer avec les assertions de texte.
+        etatReseauProvider.overrideWith(
+          (ref) => const Stream<EtatReseau>.empty(),
+        ),
         authRepositoryProvider.overrideWithValue(auth),
         catalogueRepositoryProvider.overrideWithValue(
           catalogue ?? _FauxCatalogueRepository(),

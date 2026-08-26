@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:fayemath_academy/core/errors/echec_enregistrement.dart';
+import 'package:fayemath_academy/core/network/limiteur_resynchro.dart';
 import 'package:fayemath_academy/data/local/base_locale.dart';
 import 'package:fayemath_academy/data/models/utilisateur_model.dart';
 import 'package:fayemath_academy/domain/entities/serie.dart';
@@ -24,6 +25,11 @@ class ProfilRepositoryOfflineFirst implements ProfilRepository {
   final BaseLocale _base;
   final SupabaseClient _supabase;
 
+  /// Garde anti-rafale des resynchros en arriere-plan (etape 21, Point 6), cle par
+  /// utilisateur. Ne concerne QUE la LECTURE : la resynchro post-ecriture de
+  /// [definirClasseEtSerie] n'est jamais limitee (on vient d'ecrire, il faut relire).
+  final LimiteurResynchro _limiteur = LimiteurResynchro();
+
   @override
   Future<Utilisateur?> profilCourant(String utilisateurId) async {
     final local = await _profilLocal(utilisateurId);
@@ -33,6 +39,26 @@ class ProfilRepositoryOfflineFirst implements ProfilRepository {
     }
     await _synchroniserProfil(utilisateurId);
     return _profilLocal(utilisateurId);
+  }
+
+  @override
+  Stream<Utilisateur?> observerProfilCourant(String utilisateurId) async* {
+    // Cache present : rendu immediat + resynchro en fond sous garde anti-rafale.
+    // Cache absent : on attend une synchro d'abord (le profil doit etre connu
+    // pour que la redirection go_router decide correctement).
+    final local = await _profilLocal(utilisateurId);
+    if (local != null) {
+      if (_limiteur.doitResynchroniser(utilisateurId)) {
+        unawaited(_synchroniserProfil(utilisateurId));
+      }
+    } else {
+      await _synchroniserProfil(utilisateurId);
+    }
+    yield* (_base.select(
+      _base.utilisateurs,
+    )..where((u) => u.id.equals(utilisateurId))).watchSingleOrNull().map(
+      (ligne) => ligne == null ? null : UtilisateurModel.depuisLigne(ligne),
+    );
   }
 
   @override

@@ -15,9 +15,14 @@ import 'package:fayemath_academy/domain/entities/matiere.dart';
 /// d'abord et rend la main immediatement, puis se rafraichit depuis le serveur
 /// en arriere-plan. Le contrat n'impose que le resultat, pas la mecanique.
 abstract interface class CatalogueRepository {
-  /// Les 7 classes (6e … Terminale), triees par leur `ordre` d'affichage.
-  Future<List<Classe>> classes();
+  /// Les 7 classes (6e … Terminale) en FLUX REACTIF (etape 21), triees par leur
+  /// `ordre` d'affichage : emet immediatement le cache local, puis re-emet tout
+  /// seul chaque fois qu'une resynchro en arriere-plan met le cache a jour —
+  /// l'ecran se rafraichit sans action de l'eleve (ARCHITECTURE §7, 4e etape enfin
+  /// tenue).
+  Stream<List<Classe>> observerClasses();
 
-  /// Les matieres du catalogue (Mathematiques, Physique-chimie).
-  Future<List<Matiere>> matieres();
+  /// Les matieres du catalogue (Mathematiques, Physique-chimie) en flux reactif,
+  /// meme principe que [observerClasses].
+  Stream<List<Matiere>> observerMatieres();
 }

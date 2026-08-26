@@ -16,13 +16,17 @@ final catalogueRepositoryProvider = Provider<CatalogueRepository>(
   ),
 );
 
-/// Les classes du catalogue (6e … Terminale), offline-first. L'ecran gere les
-/// trois etats de l'`AsyncValue` (chargement / donnees / erreur).
-final classesProvider = FutureProvider<List<Classe>>(
-  (ref) => ref.watch(catalogueRepositoryProvider).classes(),
+/// Les classes du catalogue (6e … Terminale), offline-first et REACTIVES (etape
+/// 21) : `StreamProvider` adosse a Drift `.watch()` — l'ecran se rafraichit tout
+/// seul quand une resynchro met le cache a jour. Le type expose reste `AsyncValue`
+/// (chargement / donnees / erreur), identique a un `FutureProvider` : les `.when`
+/// des ecrans ne changent pas.
+final classesProvider = StreamProvider<List<Classe>>(
+  (ref) => ref.watch(catalogueRepositoryProvider).observerClasses(),
 );
 
-/// Les matieres du catalogue (Mathematiques, Physique-chimie), offline-first.
-final matieresProvider = FutureProvider<List<Matiere>>(
-  (ref) => ref.watch(catalogueRepositoryProvider).matieres(),
+/// Les matieres du catalogue (Mathematiques, Physique-chimie), offline-first et
+/// reactives (meme principe que [classesProvider]).
+final matieresProvider = StreamProvider<List<Matiere>>(
+  (ref) => ref.watch(catalogueRepositoryProvider).observerMatieres(),
 );

@@ -14,12 +14,15 @@ import 'package:fayemath_academy/domain/entities/chapitre.dart';
 /// d'abord et rend la main immediatement, puis se rafraichit depuis Supabase en
 /// arriere-plan. Le contrat n'impose que le resultat, pas la mecanique.
 abstract interface class ChapitreRepository {
-  /// Les chapitres de la (classe, matiere), tries par `ordre` croissant.
+  /// Les chapitres de la (classe, matiere) en FLUX REACTIF (etape 21), tries par
+  /// `ordre` croissant : emet immediatement le cache local, puis re-emet tout seul
+  /// a chaque resynchro en arriere-plan qui met le cache a jour — l'ecran de liste
+  /// se rafraichit sans action de l'eleve (ARCHITECTURE §7).
   ///
   /// Liste VIDE si aucun chapitre n'existe encore pour ce couple : c'est le cas
   /// normal tant que le contenu reel n'est pas produit (etape 18), pas une
   /// erreur — l'ecran affiche alors son etat vide.
-  Future<List<Chapitre>> chapitresDe({
+  Stream<List<Chapitre>> observerChapitresDe({
     required String classeId,
     required String matiereId,
   });

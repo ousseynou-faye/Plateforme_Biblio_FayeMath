@@ -19,13 +19,17 @@ final chapitreRepositoryProvider = Provider<ChapitreRepository>(
   ),
 );
 
-/// Les chapitres d'une (classe, matiere), offline-first. `family` : un etat (et
-/// un cache) distinct par couple. L'ecran gere les trois etats de l'`AsyncValue`
-/// (chargement / donnees / erreur) ; une liste VIDE n'est pas une erreur, c'est
-/// l'etat normal tant que le contenu reel n'existe pas (etape 18).
-final chapitresProvider =
-    FutureProvider.family<List<Chapitre>, CibleChapitres>(
-      (ref, cible) => ref
-          .watch(chapitreRepositoryProvider)
-          .chapitresDe(classeId: cible.classeId, matiereId: cible.matiereId),
-    );
+/// Les chapitres d'une (classe, matiere), offline-first et REACTIFS (etape 21) :
+/// `StreamProvider.family` adosse a Drift `.watch()` — la liste se rafraichit
+/// toute seule quand une resynchro met le cache a jour. `family` : un etat (et un
+/// cache) distinct par couple. Le type expose reste `AsyncValue` (chargement /
+/// donnees / erreur), donc les `.when` de l'ecran ne changent pas ; une liste VIDE
+/// n'est pas une erreur, c'est l'etat normal tant que le contenu reel n'existe pas.
+final chapitresProvider = StreamProvider.family<List<Chapitre>, CibleChapitres>(
+  (ref, cible) => ref
+      .watch(chapitreRepositoryProvider)
+      .observerChapitresDe(
+        classeId: cible.classeId,
+        matiereId: cible.matiereId,
+      ),
+);

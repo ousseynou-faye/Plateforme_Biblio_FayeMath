@@ -17,6 +17,14 @@ abstract interface class ProfilRepository {
   /// encore `null` doit arriver sur l'ecran de choix, etape 14).
   Future<Utilisateur?> profilCourant(String utilisateurId);
 
+  /// Le profil de l'eleve en FLUX REACTIF (etape 21) : emet immediatement le
+  /// cache local (ou `null`), puis re-emet tout seul a chaque resynchro en
+  /// arriere-plan qui met le cache a jour. Permet a la redirection go_router de
+  /// reagir des qu'un profil devient connu / voit sa classe renseignee, sans
+  /// relancer une lecture a la main (ARCHITECTURE §7). Meme semantique que
+  /// [profilCourant].
+  Stream<Utilisateur?> observerProfilCourant(String utilisateurId);
+
   /// Enregistre le choix de classe (et de serie) de l'eleve : UPDATE de sa
   /// propre ligne via la policy `utilisateur_maj_de_soi`, JAMAIS d'INSERT. Met
   /// aussi a jour le cache local pour que la redirection en tienne compte au

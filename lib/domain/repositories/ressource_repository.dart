@@ -14,7 +14,10 @@ import 'package:fayemath_academy/domain/entities/ressource.dart';
 /// d'abord et rend la main immediatement, puis se rafraichit depuis Supabase en
 /// arriere-plan. Le contrat n'impose que le resultat, pas la mecanique.
 abstract interface class RessourceRepository {
-  /// Les ressources rattachees a ce chapitre, triees par `ordre` croissant.
+  /// Les ressources du chapitre en FLUX REACTIF (etape 21), triees par `ordre`
+  /// croissant : emet immediatement le cache local, puis re-emet tout seul a
+  /// chaque resynchro en arriere-plan qui met le cache a jour — l'ecran de detail
+  /// se rafraichit sans action de l'eleve (ARCHITECTURE §7).
   ///
   /// Ne renvoie que les documents d'un CHAPITRE : un `sujet_examen` (rattache a
   /// une classe + matiere, `chapitre_id` null — voir [Ressource]) est
@@ -24,5 +27,7 @@ abstract interface class RessourceRepository {
   /// Liste VIDE si aucune ressource n'existe encore pour ce chapitre : c'est le
   /// cas normal tant que le contenu reel n'est pas produit (etape 18), pas une
   /// erreur — l'ecran affiche alors son etat vide.
-  Future<List<Ressource>> ressourcesDuChapitre({required String chapitreId});
+  Stream<List<Ressource>> observerRessourcesDuChapitre({
+    required String chapitreId,
+  });
 }

@@ -14,12 +14,15 @@ final ressourceRepositoryProvider = Provider<RessourceRepository>(
   ),
 );
 
-/// Les ressources d'un chapitre, offline-first. `family` keyee par `chapitreId` :
-/// un etat (et un cache) distinct par chapitre. L'ecran gere les trois etats de
-/// l'`AsyncValue` (chargement / donnees / erreur) ; une liste VIDE n'est pas une
-/// erreur, c'est l'etat normal tant que le contenu reel n'existe pas (etape 18).
-final ressourcesProvider = FutureProvider.family<List<Ressource>, String>(
+/// Les ressources d'un chapitre, offline-first et REACTIVES (etape 21) :
+/// `StreamProvider.family` adosse a Drift `.watch()` — la liste se rafraichit
+/// toute seule quand une resynchro met le cache a jour. `family` keyee par
+/// `chapitreId` : un etat distinct par chapitre. Le type expose reste `AsyncValue`
+/// (chargement / donnees / erreur), donc le `.when` de l'ecran ne change pas ; une
+/// liste VIDE n'est pas une erreur, c'est l'etat normal tant que le contenu reel
+/// n'existe pas (etape 18).
+final ressourcesProvider = StreamProvider.family<List<Ressource>, String>(
   (ref, chapitreId) => ref
       .watch(ressourceRepositoryProvider)
-      .ressourcesDuChapitre(chapitreId: chapitreId),
+      .observerRessourcesDuChapitre(chapitreId: chapitreId),
 );

@@ -60,9 +60,9 @@ class _FauxCatalogueRepository implements CatalogueRepository {
   final List<Matiere> lesMatieres;
 
   @override
-  Future<List<Classe>> classes() async => lesClasses;
+  Stream<List<Classe>> observerClasses() => Stream.value(lesClasses);
   @override
-  Future<List<Matiere>> matieres() async => lesMatieres;
+  Stream<List<Matiere>> observerMatieres() => Stream.value(lesMatieres);
 }
 
 class _FauxProfilRepository implements ProfilRepository {
@@ -72,6 +72,9 @@ class _FauxProfilRepository implements ProfilRepository {
 
   @override
   Future<Utilisateur?> profilCourant(String utilisateurId) async => profil;
+  @override
+  Stream<Utilisateur?> observerProfilCourant(String utilisateurId) =>
+      Stream.value(profil);
   @override
   Future<void> definirClasseEtSerie({
     required String utilisateurId,
@@ -86,10 +89,10 @@ class _FauxChapitreRepository implements ChapitreRepository {
   final List<Chapitre> chapitres;
 
   @override
-  Future<List<Chapitre>> chapitresDe({
+  Stream<List<Chapitre>> observerChapitresDe({
     required String classeId,
     required String matiereId,
-  }) async => chapitres;
+  }) => Stream.value(chapitres);
 }
 
 const _maths = Matiere(id: 'm-maths', nom: 'Mathématiques');
@@ -153,7 +156,11 @@ void main() {
     await _monterEcran(
       tester,
       chapitres: [
-        _chap(ordre: 1, titre: 'Les nombres entiers', strate: 'Activites numeriques'),
+        _chap(
+          ordre: 1,
+          titre: 'Les nombres entiers',
+          strate: 'Activites numeriques',
+        ),
         _chap(ordre: 2, titre: 'Les fractions', strate: 'Activites numeriques'),
         _chap(ordre: 3, titre: 'La symetrie', strate: 'Activites geometriques'),
       ],
@@ -177,30 +184,26 @@ void main() {
     await _monterEcran(tester, chapitres: const []);
 
     expect(find.text('Bientot disponible'), findsOneWidget);
-    expect(
-      find.textContaining('n\'est pas encore disponible'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('n\'est pas encore disponible'), findsOneWidget);
     // Ce n'est pas l'etat d'erreur.
     expect(find.text('Impossible de charger les chapitres.'), findsNothing);
   });
 
-  testWidgets(
-    'le bouton de deconnexion (provisoire) declenche seDeconnecter',
-    (tester) async {
-      final auth = _FauxAuthRepository(
-        session: const SessionAuth(utilisateurId: 'u1'),
-      );
-      await _monterEcran(tester, chapitres: const [], authRepository: auth);
+  testWidgets('le bouton de deconnexion (provisoire) declenche seDeconnecter', (
+    tester,
+  ) async {
+    final auth = _FauxAuthRepository(
+      session: const SessionAuth(utilisateurId: 'u1'),
+    );
+    await _monterEcran(tester, chapitres: const [], authRepository: auth);
 
-      // Le bouton est present dans l'AppBar (accessible par son tooltip).
-      final bouton = find.byTooltip('Se deconnecter');
-      expect(bouton, findsOneWidget);
+    // Le bouton est present dans l'AppBar (accessible par son tooltip).
+    final bouton = find.byTooltip('Se deconnecter');
+    expect(bouton, findsOneWidget);
 
-      await tester.tap(bouton);
-      await tester.pump();
+    await tester.tap(bouton);
+    await tester.pump();
 
-      expect(auth.deconnexionAppelee, isTrue);
-    },
-  );
+    expect(auth.deconnexionAppelee, isTrue);
+  });
 }

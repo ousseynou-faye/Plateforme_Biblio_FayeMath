@@ -27,35 +27,43 @@ class ApercuHorsLigne {
 ///     par chapitre — la verite de « present hors-ligne » est le disque ;
 ///   - l'ANNEAU = la couverture, soit la part de chapitres dont TOUS les documents
 ///     accessibles a l'eleve sont deja la ([DisponibiliteHorsLigne], point 5-a).
-final apercuHorsLigneProvider =
-    FutureProvider.family<ApercuHorsLigne, CibleChapitres>((ref, cle) async {
-      final chapitres = await ref.watch(chapitresProvider(cle).future);
+final apercuHorsLigneProvider = FutureProvider.family<ApercuHorsLigne, CibleChapitres>((
+  ref,
+  cle,
+) async {
+  final chapitres = await ref.watch(chapitresProvider(cle).future);
 
-      final presents = await ref
-          .watch(telechargementRepositoryProvider)
-          .listerPresents();
-      final idsPresents = presents.map((r) => r.id).toSet();
+  final presents = await ref
+      .watch(telechargementRepositoryProvider)
+      .listerPresents();
+  final idsPresents = presents.map((r) => r.id).toSet();
 
-      // Anneau : toutes les ressources ACCESSIBLES de la bibliotheque. « Accessible »
-      // = non premium en V1 (aucun abonnement encore ; le filtre par abonnement
-      // actif arrivera avec le paiement, V2). Chaque chapitre est lu en cache local.
-      final repo = ref.watch(ressourceRepositoryProvider);
-      final parChapitre = await Future.wait(
-        chapitres.map((c) => repo.ressourcesDuChapitre(chapitreId: c.id)),
-      );
-      final accessibles = [
-        for (final liste in parChapitre)
-          for (final ressource in liste)
-            if (!ressource.premium) ressource,
-      ];
-      final ratio = DisponibiliteHorsLigne.calculer(
-        chapitres: chapitres,
-        ressourcesAccessibles: accessibles,
-        idsPresents: idsPresents,
-      );
+  // Anneau : toutes les ressources ACCESSIBLES de la bibliotheque. « Accessible »
+  // = non premium en V1 (aucun abonnement encore ; le filtre par abonnement
+  // actif arrivera avec le paiement, V2). Chaque chapitre est lu en cache local.
+  final repo = ref.watch(ressourceRepositoryProvider);
+  // Lecture PONCTUELLE par chapitre : `.first` prend la premiere emission du
+  // flux offline-first (le cache local, ou la 1re synchro si le cache est
+  // vide) puis se termine — meme semantique que l'ancienne lecture Future,
+  // retiree a l'etape 21 au profit des seuls flux reactifs.
+  final parChapitre = await Future.wait(
+    chapitres.map(
+      (c) => repo.observerRessourcesDuChapitre(chapitreId: c.id).first,
+    ),
+  );
+  final accessibles = [
+    for (final liste in parChapitre)
+      for (final ressource in liste)
+        if (!ressource.premium) ressource,
+  ];
+  final ratio = DisponibiliteHorsLigne.calculer(
+    chapitres: chapitres,
+    ressourcesAccessibles: accessibles,
+    idsPresents: idsPresents,
+  );
 
-      return ApercuHorsLigne(
-        ratio: ratio,
-        groupes: RegroupementDocumentsHorsLigne.de(presents, chapitres),
-      );
-    });
+  return ApercuHorsLigne(
+    ratio: ratio,
+    groupes: RegroupementDocumentsHorsLigne.de(presents, chapitres),
+  );
+});

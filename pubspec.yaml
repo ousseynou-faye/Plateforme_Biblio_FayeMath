@@ -69,6 +69,14 @@ dependencies:
   # bytes — couvre le besoin de l'ecran 7 et le futur offline-first (Phase 3).
   pdfx: ^2.9.2
 
+  # Detection reseau (etape 21, bandeau du haut SPEC §2.3) : rapporte le type
+  # d'interface active (wifi / donnees mobiles / aucune) via un flux. Flutter
+  # Favorite, editeur verifie fluttercommunity.dev. Ne verifie PAS la joignabilite
+  # reelle d'Internet — choix assume V1 (le cas residuel « interface active mais
+  # serveur injoignable » est rattrape par l'echec silencieux des resynchros
+  # offline-first). Enrobe dans core/network/DetecteurReseau.
+  connectivity_plus: ^7.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

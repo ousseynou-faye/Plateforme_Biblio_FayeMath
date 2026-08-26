@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:fayemath_academy/domain/entities/serie.dart';
@@ -52,17 +50,24 @@ class ProfilNotifier extends Notifier<EtatProfil> {
     final etatAuth = ref.watch(etatAuthProvider);
     if (etatAuth is! AuthConnecte) return const ProfilHorsSujet();
 
-    // Lecture offline-first en arriere-plan ; on part de « en chargement » pour
-    // que la redirection attende un verdict plutot que de supposer.
-    unawaited(_charger(etatAuth.session.utilisateurId));
-    return const ProfilEnChargement();
-  }
-
-  Future<void> _charger(String utilisateurId) async {
-    final profil = await ref
+    final utilisateurId = etatAuth.session.utilisateurId;
+    // Ecoute REACTIVE du profil (etape 21) : au lieu d'une lecture unique, on
+    // re-publie ProfilResolu a CHAQUE resynchro qui met le cache local a jour
+    // (ex. la classe fraichement renseignee cote serveur) — la redirection
+    // go_router reagit toute seule (ARCHITECTURE §7). build() est relance a
+    // chaque changement d'auth : onDispose coupe l'ecoute precedente avant qu'une
+    // nouvelle ne demarre (et a la destruction du provider). On part de « en
+    // chargement » pour que la redirection attende un verdict plutot que de
+    // supposer. La garde _publierSiActuel protege d'une valeur en vol lancee pour
+    // un compte precedent.
+    final abonnement = ref
         .read(profilRepositoryProvider)
-        .profilCourant(utilisateurId);
-    _publierSiActuel(utilisateurId, ProfilResolu(profil));
+        .observerProfilCourant(utilisateurId)
+        .listen(
+          (profil) => _publierSiActuel(utilisateurId, ProfilResolu(profil)),
+        );
+    ref.onDispose(abonnement.cancel);
+    return const ProfilEnChargement();
   }
 
   /// Enregistre le choix de classe / serie de l'eleve connecte, puis met l'etat
