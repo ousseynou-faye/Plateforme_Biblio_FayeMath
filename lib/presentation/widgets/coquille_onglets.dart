@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:go_router/go_router.dart';
 
+import 'package:fayemath_academy/presentation/widgets/bandeau_reseau_widget.dart';
+
 /// La coquille a onglets de l'app (maquette V2.1, barre du bas a 4 onglets :
 /// Accueil / Cours / Hors-ligne / Profil). Introduite a l'etape 20 : c'est la
 /// premiere fois que l'app a une navigation a onglets a etat conserve.
@@ -33,7 +35,19 @@ class CoquilleOnglets extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: navigationShell,
+      // Bandeau reseau en tete des 4 onglets (SPEC §2.2 : « une seule fois dans le
+      // bandeau haut de chaque ecran »). `SafeArea(top)` consomme l'encoche : le
+      // bandeau se pose sous la barre systeme, et les AppBar des ecrans d'onglet
+      // s'affichent juste en dessous sans double marge.
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            const BandeauReseauWidget(),
+            Expanded(child: navigationShell),
+          ],
+        ),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: _allerOnglet,

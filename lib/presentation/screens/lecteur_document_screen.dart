@@ -12,6 +12,7 @@ import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
+import 'package:fayemath_academy/presentation/widgets/bandeau_reseau_widget.dart';
 import 'package:fayemath_academy/presentation/widgets/bouton_primaire_widget.dart';
 
 /// Lecteur de document (maquette V2.1, ecran 7). Depuis le detail d'un chapitre
@@ -181,6 +182,9 @@ class _LecteurDocumentScreenState extends ConsumerState<LecteurDocumentScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            // Bandeau reseau (SPEC §2.2) : l'ETAT DU RESEAU, a ne pas confondre
+            // avec la disponibilite locale du document affichee plus bas.
+            const BandeauReseauWidget(),
             _SousBandeau(
               titre: widget.chapitre.titre,
               sousTitre: LibellesLecteur.sousTitre(

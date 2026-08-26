@@ -10,6 +10,7 @@ import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/domain/entities/type_ressource.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
 import 'package:fayemath_academy/presentation/widgets/badge_premium_widget.dart';
+import 'package:fayemath_academy/presentation/widgets/bandeau_reseau_widget.dart';
 import 'package:fayemath_academy/presentation/widgets/bouton_primaire_widget.dart';
 
 /// Detail d'un chapitre (maquette V2.1, ecran 6) : le titre, un statut de
@@ -23,8 +24,10 @@ import 'package:fayemath_academy/presentation/widgets/bouton_primaire_widget.dar
 ///  - la ligne d'un document n'affiche PAS d'etat de telechargement : les 8 etats
 ///    de SPEC §2.4 supposent un moteur de telechargement / une detection reseau
 ///    inexistants. On AFFICHE, on ne telecharge pas (etape 17 / Phase 3) ; le tap
-///    reste un placeholder, comme la ligne de chapitre a l'etape 15 ;
-///  - le bandeau hors-ligne est omis (detection reseau = Phase 3).
+///    reste un placeholder, comme la ligne de chapitre a l'etape 15.
+///
+/// Depuis l'etape 21, un [BandeauReseauWidget] coiffe l'ecran (SPEC §2.2 : bandeau
+/// haut de CHAQUE ecran de contenu) — distinct de la disponibilite d'un document.
 ///
 /// Tant qu'aucune ressource reelle n'existe en base (contenu = etape 18), l'ecran
 /// affiche son ETAT VIDE — comportement attendu, pas une erreur.
@@ -41,19 +44,26 @@ class DetailChapitreScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: Text('Chapitre ${chapitre.numero}')),
       body: SafeArea(
-        child: Builder(
-          builder: (context) {
-            if (ressources == null) {
-              if (ressourcesAsync.hasError) {
-                return _EtatErreur(
-                  onReessayer: () =>
-                      ref.invalidate(ressourcesProvider(chapitre.id)),
-                );
-              }
-              return const Center(child: CircularProgressIndicator());
-            }
-            return _Corps(chapitre: chapitre, ressources: ressources);
-          },
+        child: Column(
+          children: [
+            const BandeauReseauWidget(),
+            Expanded(
+              child: Builder(
+                builder: (context) {
+                  if (ressources == null) {
+                    if (ressourcesAsync.hasError) {
+                      return _EtatErreur(
+                        onReessayer: () =>
+                            ref.invalidate(ressourcesProvider(chapitre.id)),
+                      );
+                    }
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  return _Corps(chapitre: chapitre, ressources: ressources);
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -169,10 +179,8 @@ class _BoutonModifierStatut extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextButton(
       style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
-      onPressed: () => _afficherBientot(
-        context,
-        'Le suivi de progression arrive bientot.',
-      ),
+      onPressed: () =>
+          _afficherBientot(context, 'Le suivi de progression arrive bientot.'),
       child: const Text('Modifier'),
     );
   }
@@ -305,7 +313,11 @@ class _IconeType extends StatelessWidget {
         color: colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(9),
       ),
-      child: Icon(_iconePour(type), size: 18, color: colorScheme.onPrimaryContainer),
+      child: Icon(
+        _iconePour(type),
+        size: 18,
+        color: colorScheme.onPrimaryContainer,
+      ),
     );
   }
 
@@ -404,7 +416,11 @@ class _EtatErreur extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off, size: 48, color: colorScheme.onSurfaceVariant),
+            Icon(
+              Icons.cloud_off,
+              size: 48,
+              color: colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 12),
             Text(
               'Impossible de charger les documents.',
