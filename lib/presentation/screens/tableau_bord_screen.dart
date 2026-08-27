@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:fayemath_academy/presentation/widgets/contenu_a_venir_widget.dart';
 
 /// Onglet « Accueil » de la barre du bas (maquette V2.1, ecran 4 « Tableau de
-/// bord »). PLACEHOLDER a l'etape 20 : le vrai tableau de bord depend du suivi de
-/// progression (etape 22), inexistant a ce jour. On l'annonce clairement plutot
-/// que d'afficher un ecran vide ou faux.
+/// bord »). PLACEHOLDER : le vrai tableau de bord (progression globale, reprise de
+/// lecture) releve de l'etape 24 (« Ma progression »), pas de l'etape 22 qui ne
+/// construit que le suivi d'etat par chapitre. On l'annonce clairement plutot que
+/// d'afficher un ecran vide ou faux.
 class TableauBordScreen extends StatelessWidget {
   const TableauBordScreen({super.key});
 
@@ -16,8 +17,9 @@ class TableauBordScreen extends StatelessWidget {
       body: const ContenuAVenirWidget(
         icone: Icons.dashboard_outlined,
         titre: 'Tableau de bord',
-        texte: 'Ton tableau de bord (progression, reprise de lecture) arrivera '
-            'avec le suivi de progression.',
+        texte:
+            'Ton tableau de bord (progression globale, reprise de lecture) '
+            'arrivera bientot.',
       ),
     );
   }

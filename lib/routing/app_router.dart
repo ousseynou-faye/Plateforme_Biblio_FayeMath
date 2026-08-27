@@ -28,7 +28,8 @@ const cheminChoixClasse = '/choix-classe';
 /// chapitres). C'est la cible de redirection ([_cibleNavigation]). L'onglet
 /// « Accueil » (tableau de bord) est [cheminTableauBord], distinct : atterrir sur
 /// un tableau de bord encore vide serait une regression (l'arrivee basculera dessus
-/// quand il existera, etape 22).
+/// quand il existera, etape 24 — pas l'etape 22, qui ne construit que le suivi de
+/// progression, sans le tableau de bord ni « Ma progression »).
 const cheminAccueil = '/';
 
 /// Les trois autres racines d'onglet de la coquille (barre du bas a 4 onglets).

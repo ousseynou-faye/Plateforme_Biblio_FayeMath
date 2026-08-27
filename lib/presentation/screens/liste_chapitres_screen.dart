@@ -7,21 +7,23 @@ import 'package:fayemath_academy/core/errors/echecs_authentification.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
 import 'package:fayemath_academy/domain/entities/matiere.dart';
+import 'package:fayemath_academy/domain/entities/etat_progression.dart';
 import 'package:fayemath_academy/domain/usecases/regroupement_par_strate.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/bibliotheque_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
+import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
 import 'package:fayemath_academy/presentation/widgets/bouton_primaire_widget.dart';
+import 'package:fayemath_academy/presentation/widgets/statut_progression_chip.dart';
 
 /// Liste des chapitres d'une (classe, matiere), regroupes par strate (maquette
 /// V2.1, ecran 5). Premier ecran de contenu reel (etape 15).
 ///
-/// Perimetre volontairement reduit a cette etape (valide avec Ousseynou) : on
-/// AFFICHE le numero + le titre, groupes par strate, avec « N chapitres ». On
-/// OMET, faute de brique existante et sans consommateur defini : le compteur
-/// « X termines » et la pastille de statut (pas de `ProgressionRepository`),
-/// l'indicateur « sur l'appareil / indisponible hors-ligne » (Phase 3), les
+/// On AFFICHE le numero + le titre, groupes par strate, avec « N chapitres · X
+/// termines » et, sur chaque ligne, la pastille de statut de progression (etape
+/// 22, via [etatsChapitresProvider]). On OMET encore, sans consommateur defini :
+/// l'indicateur « sur l'appareil / indisponible hors-ligne » (Phase 3) et les
 /// boutons Filtrer / Recherche (ecran 19). Les lignes sont de vrais boutons
 /// accessibles qui ouvrent l'ecran de detail du chapitre (ecran 6, etape 16).
 ///
@@ -34,7 +36,8 @@ class ListeChapitresScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final resolution = _resoudreCible(ref);
     final titre = switch (resolution) {
-      _CibleResolue(:final cible) => '${cible.matiere.nom} · ${cible.classe.nom}',
+      _CibleResolue(:final cible) =>
+        '${cible.matiere.nom} · ${cible.classe.nom}',
       _ => 'Chapitres',
     };
     return Scaffold(
@@ -55,8 +58,12 @@ class ListeChapitresScreen extends ConsumerWidget {
       ),
       body: SafeArea(
         child: switch (resolution) {
-          _CibleEnChargement() => const Center(child: CircularProgressIndicator()),
-          _CibleErreur() => _EtatErreur(onReessayer: () => _rechargerCatalogue(ref)),
+          _CibleEnChargement() => const Center(
+            child: CircularProgressIndicator(),
+          ),
+          _CibleErreur() => _EtatErreur(
+            onReessayer: () => _rechargerCatalogue(ref),
+          ),
           _CibleResolue(:final cible) => _CorpsChapitres(cible: cible),
         },
       ),
@@ -94,8 +101,9 @@ class ListeChapitresScreen extends ConsumerWidget {
   _Resolution _resoudreCible(WidgetRef ref) {
     final biblio = ref.watch(bibliothequeCouranteProvider);
     return switch (biblio) {
-      AsyncData(:final value) when value != null =>
-        _CibleResolue(_Cible(classe: value.classe, matiere: value.matiere)),
+      AsyncData(:final value) when value != null => _CibleResolue(
+        _Cible(classe: value.classe, matiere: value.matiere),
+      ),
       AsyncError() => const _CibleErreur(),
       _ => const _CibleEnChargement(),
     };
@@ -142,6 +150,13 @@ class _CorpsChapitres extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final chapitresAsync = ref.watch(chapitresProvider(cible.cle));
     final chapitres = chapitresAsync.value;
+    // Progression de l'eleve (etape 22) : Map chapitreId -> etat, un seul
+    // abonnement pour toute la liste. Absente/en chargement/invite -> Map vide,
+    // chaque chapitre retombe alors sur « A faire » (defaut). Ne bloque jamais
+    // l'affichage des chapitres : c'est une couche d'info en plus.
+    final etats =
+        ref.watch(etatsChapitresProvider).value ??
+        const <String, EtatProgression>{};
 
     if (chapitres == null) {
       if (chapitresAsync.hasError) {
@@ -154,28 +169,35 @@ class _CorpsChapitres extends ConsumerWidget {
     if (chapitres.isEmpty) {
       return _EtatVide(matiere: cible.matiere);
     }
-    return _ListeGroupee(chapitres: chapitres);
+    return _ListeGroupee(chapitres: chapitres, etats: etats);
   }
 }
 
-/// La liste chargee : « N chapitres » puis un en-tete par strate suivi de ses
-/// lignes. Le regroupement est la regle pure [RegroupementParStrate].
+/// La liste chargee : « N chapitres · X termines » puis un en-tete par strate
+/// suivi de ses lignes. Le regroupement est la regle pure [RegroupementParStrate].
 class _ListeGroupee extends StatelessWidget {
-  const _ListeGroupee({required this.chapitres});
+  const _ListeGroupee({required this.chapitres, required this.etats});
 
   final List<Chapitre> chapitres;
+  final Map<String, EtatProgression> etats;
+
+  EtatProgression _etatDe(Chapitre chapitre) =>
+      etats[chapitre.id] ?? EtatProgression.aFaire;
 
   @override
   Widget build(BuildContext context) {
     final groupes = RegroupementParStrate.de(chapitres);
+    final termines = chapitres
+        .where((c) => _etatDe(c) == EtatProgression.fait)
+        .length;
     return ListView(
       padding: EdgeInsets.zero,
       children: [
-        _SousEntete(nombre: chapitres.length),
+        _SousEntete(nombre: chapitres.length, termines: termines),
         for (final groupe in groupes) ...[
           if (groupe.strate != null) _EnteteStrate(groupe.strate!),
           for (final chapitre in groupe.chapitres)
-            _LigneChapitre(chapitre: chapitre),
+            _LigneChapitre(chapitre: chapitre, etat: _etatDe(chapitre)),
         ],
         const SizedBox(height: 12),
       ],
@@ -183,17 +205,19 @@ class _ListeGroupee extends StatelessWidget {
   }
 }
 
-/// Rappel du nombre de chapitres (« 1 chapitre » / « N chapitres »). Le compteur
-/// « X termines » de la maquette est omis a cette etape (pas de progression).
+/// Rappel « N chapitres · X termines » (maquette ecran 5). « termines » compte les
+/// chapitres marques « fait » (etape 22).
 class _SousEntete extends StatelessWidget {
-  const _SousEntete({required this.nombre});
+  const _SousEntete({required this.nombre, required this.termines});
 
   final int nombre;
+  final int termines;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final libelle = nombre == 1 ? '1 chapitre' : '$nombre chapitres';
+    final libelleChapitres = nombre == 1 ? '1 chapitre' : '$nombre chapitres';
+    final libelle = '$libelleChapitres · $termines termines';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -234,13 +258,14 @@ class _EnteteStrate extends StatelessWidget {
   }
 }
 
-/// Une ligne de chapitre : numero + titre, vrai bouton accessible (>= 48 px de
-/// haut, Semantics). Le tap ouvre l'ecran de detail (ecran 6) via une navigation
-/// imperative (premiere de l'app — voir [_ouvrir]).
+/// Une ligne de chapitre : numero + titre + pastille de statut (etape 22), vrai
+/// bouton accessible (>= 48 px de haut, Semantics). Le tap ouvre l'ecran de detail
+/// (ecran 6) via une navigation imperative (premiere de l'app — voir [_ouvrir]).
 class _LigneChapitre extends StatelessWidget {
-  const _LigneChapitre({required this.chapitre});
+  const _LigneChapitre({required this.chapitre, required this.etat});
 
   final Chapitre chapitre;
+  final EtatProgression etat;
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +273,9 @@ class _LigneChapitre extends StatelessWidget {
     final reduireMouvement = MediaQuery.of(context).disableAnimations;
     return Semantics(
       button: true,
-      label: 'Chapitre ${chapitre.numero}, ${chapitre.titre}',
+      label:
+          'Chapitre ${chapitre.numero}, ${chapitre.titre}, '
+          'statut ${etat.libelleAffichage}',
       excludeSemantics: true,
       child: Material(
         color: colorScheme.surface,
@@ -282,6 +309,8 @@ class _LigneChapitre extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
+                const SizedBox(width: 8),
+                StatutProgressionChip(etat: etat),
               ],
             ),
           ),
@@ -347,9 +376,9 @@ class _EtatVide extends StatelessWidget {
               'La bibliotheque de ${matiere.nom} n\'est pas encore disponible '
               'pour ta classe. Reviens bientot !',
               textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -374,7 +403,11 @@ class _EtatErreur extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off, size: 48, color: colorScheme.onSurfaceVariant),
+            Icon(
+              Icons.cloud_off,
+              size: 48,
+              color: colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 12),
             Text(
               'Impossible de charger les chapitres.',
@@ -385,9 +418,9 @@ class _EtatErreur extends StatelessWidget {
             Text(
               'Verifie ta connexion, puis reessaie.',
               textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 16),
             BoutonPrimaireWidget(

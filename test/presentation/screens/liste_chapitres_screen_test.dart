@@ -8,9 +8,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:fayemath_academy/core/theme/theme.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
 import 'package:fayemath_academy/domain/entities/cycle.dart';
+import 'package:fayemath_academy/domain/entities/etat_progression.dart';
 import 'package:fayemath_academy/domain/entities/matiere.dart';
 import 'package:fayemath_academy/domain/entities/serie.dart';
 import 'package:fayemath_academy/domain/entities/session_auth.dart';
@@ -19,10 +21,12 @@ import 'package:fayemath_academy/domain/repositories/auth_repository.dart';
 import 'package:fayemath_academy/domain/repositories/catalogue_repository.dart';
 import 'package:fayemath_academy/domain/repositories/chapitre_repository.dart';
 import 'package:fayemath_academy/domain/repositories/profil_repository.dart';
+import 'package:fayemath_academy/domain/repositories/progression_repository.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
+import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
 import 'package:fayemath_academy/presentation/screens/liste_chapitres_screen.dart';
 
 class _FauxAuthRepository implements AuthRepository {
@@ -95,6 +99,32 @@ class _FauxChapitreRepository implements ChapitreRepository {
   }) => Stream.value(chapitres);
 }
 
+class _FauxProgressionRepository implements ProgressionRepository {
+  _FauxProgressionRepository([Map<String, EtatProgression>? etats])
+    : etats = {...?etats};
+
+  final Map<String, EtatProgression> etats;
+
+  @override
+  Stream<EtatProgression> observerEtat({
+    required String utilisateurId,
+    required String chapitreId,
+  }) => Stream.value(etats[chapitreId] ?? EtatProgression.aFaire);
+
+  @override
+  Stream<Map<String, EtatProgression>> observerEtats(String utilisateurId) =>
+      Stream.value(etats);
+
+  @override
+  Future<void> definirEtat({
+    required String utilisateurId,
+    required String chapitreId,
+    required EtatProgression etat,
+  }) async {
+    etats[chapitreId] = etat;
+  }
+}
+
 const _maths = Matiere(id: 'm-maths', nom: 'Mathématiques');
 const _classe6e = Classe(id: 'c-6e', nom: '6e', cycle: Cycle.college, ordre: 1);
 
@@ -116,6 +146,7 @@ Future<void> _monterEcran(
   WidgetTester tester, {
   required List<Chapitre> chapitres,
   _FauxAuthRepository? authRepository,
+  Map<String, EtatProgression> progression = const {},
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -142,8 +173,14 @@ Future<void> _monterEcran(
         chapitreRepositoryProvider.overrideWithValue(
           _FauxChapitreRepository(chapitres),
         ),
+        progressionRepositoryProvider.overrideWithValue(
+          _FauxProgressionRepository(progression),
+        ),
       ],
-      child: const MaterialApp(home: ListeChapitresScreen()),
+      child: MaterialApp(
+        theme: ThemeApplication.clair,
+        home: const ListeChapitresScreen(),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -168,7 +205,8 @@ void main() {
 
     // Titre = « matiere · classe » (derivation option 1 : Mathematiques).
     expect(find.text('Mathématiques · 6e'), findsOneWidget);
-    expect(find.text('3 chapitres'), findsOneWidget);
+    // Aucune progression -> « 0 termines ».
+    expect(find.text('3 chapitres · 0 termines'), findsOneWidget);
 
     // En-tetes de strate (pilotes par la donnee, mis en majuscules).
     expect(find.text('ACTIVITES NUMERIQUES'), findsOneWidget);
@@ -178,6 +216,36 @@ void main() {
     expect(find.text('Les nombres entiers'), findsOneWidget);
     expect(find.text('Les fractions'), findsOneWidget);
     expect(find.text('La symetrie'), findsOneWidget);
+  });
+
+  testWidgets('la progression pilote le compteur et les pastilles', (
+    tester,
+  ) async {
+    await _monterEcran(
+      tester,
+      chapitres: [
+        _chap(
+          ordre: 1,
+          titre: 'Les nombres entiers',
+          strate: 'Activites numeriques',
+        ),
+        _chap(ordre: 2, titre: 'Les fractions', strate: 'Activites numeriques'),
+        _chap(ordre: 3, titre: 'La symetrie', strate: 'Activites geometriques'),
+      ],
+      progression: const {
+        'c-1': EtatProgression.fait,
+        'c-2': EtatProgression.enCours,
+        // c-3 non touche -> « A faire » par defaut.
+      },
+    );
+
+    // Compteur : un seul chapitre « fait ».
+    expect(find.text('3 chapitres · 1 termines'), findsOneWidget);
+
+    // Une pastille par etat visible (fait / en cours / a faire par defaut).
+    expect(find.text('Fait'), findsOneWidget);
+    expect(find.text('En cours'), findsOneWidget);
+    expect(find.text('A faire'), findsOneWidget);
   });
 
   testWidgets('base vide -> etat vide adapte (pas une erreur)', (tester) async {

@@ -12,6 +12,7 @@ import 'package:fayemath_academy/core/network/etat_reseau.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
 import 'package:fayemath_academy/domain/entities/cycle.dart';
+import 'package:fayemath_academy/domain/entities/etat_progression.dart';
 import 'package:fayemath_academy/domain/entities/matiere.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/domain/entities/serie.dart';
@@ -22,6 +23,7 @@ import 'package:fayemath_academy/domain/repositories/auth_repository.dart';
 import 'package:fayemath_academy/domain/repositories/catalogue_repository.dart';
 import 'package:fayemath_academy/domain/repositories/chapitre_repository.dart';
 import 'package:fayemath_academy/domain/repositories/profil_repository.dart';
+import 'package:fayemath_academy/domain/repositories/progression_repository.dart';
 import 'package:fayemath_academy/domain/repositories/ressource_repository.dart';
 import 'package:fayemath_academy/domain/repositories/telechargement_repository.dart';
 import 'package:fayemath_academy/app.dart';
@@ -30,6 +32,7 @@ import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart'
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
 import 'package:fayemath_academy/presentation/providers/etat_reseau_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
+import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
 import 'package:fayemath_academy/presentation/screens/detail_chapitre_screen.dart';
@@ -132,6 +135,27 @@ class _FauxRessourceRepository implements RessourceRepository {
   }) => Stream.value(ressources);
 }
 
+/// Faux suivi de progression : tout « A faire », aucune ecriture reelle (les
+/// tests de navigation n'exercent pas la modification de statut).
+class _FauxProgressionRepository implements ProgressionRepository {
+  @override
+  Stream<EtatProgression> observerEtat({
+    required String utilisateurId,
+    required String chapitreId,
+  }) => Stream.value(EtatProgression.aFaire);
+
+  @override
+  Stream<Map<String, EtatProgression>> observerEtats(String utilisateurId) =>
+      Stream.value(const {});
+
+  @override
+  Future<void> definirEtat({
+    required String utilisateurId,
+    required String chapitreId,
+    required EtatProgression etat,
+  }) async {}
+}
+
 /// Faux moteur de telechargement : rien sur le disque, flux inerte (la
 /// navigation vers le lecteur n'a pas besoin d'un vrai transfert).
 class _FauxTelechargementRepository implements TelechargementRepository {
@@ -187,6 +211,9 @@ Future<void> monterApp(
         ),
         profilRepositoryProvider.overrideWithValue(
           profil ?? _FauxProfilRepository(),
+        ),
+        progressionRepositoryProvider.overrideWithValue(
+          _FauxProgressionRepository(),
         ),
         telechargementRepositoryProvider.overrideWithValue(
           _FauxTelechargementRepository(),

@@ -8,19 +8,24 @@ import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/etat_progression.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/domain/entities/type_ressource.dart';
+import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
+import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
 import 'package:fayemath_academy/presentation/widgets/badge_premium_widget.dart';
 import 'package:fayemath_academy/presentation/widgets/bandeau_reseau_widget.dart';
 import 'package:fayemath_academy/presentation/widgets/bouton_primaire_widget.dart';
+import 'package:fayemath_academy/presentation/widgets/statut_progression_chip.dart';
 
 /// Detail d'un chapitre (maquette V2.1, ecran 6) : le titre, un statut de
 /// progression, puis « Les N documents du chapitre » — chaque document avec son
 /// type, sa taille et son badge gratuit/premium.
 ///
+/// Depuis l'etape 22, le statut de progression est REEL : la pastille reflete
+/// l'etat enregistre (defaut « A faire »), et « Modifier » ouvre le selecteur des
+/// 4 etats — modifiable meme hors-ligne (ecriture locale d'abord). Pour un invite
+/// (progression liee au compte), « Modifier » invite a creer un compte.
+///
 /// Perimetre volontairement reduit (valide avec Ousseynou, etape 16) :
-///  - le statut de progression est TOUJOURS « A faire » et le bouton « Modifier »
-///    est un placeholder : aucun `ProgressionRepository` n'existe encore
-///    (affichage seulement — voir Journal etape 16) ;
 ///  - la ligne d'un document n'affiche PAS d'etat de telechargement : les 8 etats
 ///    de SPEC §2.4 supposent un moteur de telechargement / une detection reseau
 ///    inexistants. On AFFICHE, on ne telecharge pas (etape 17 / Phase 3) ; le tap
@@ -100,16 +105,21 @@ class _Corps extends StatelessWidget {
   }
 }
 
-/// Titre du chapitre + ligne de statut de progression (affichage seulement).
-class _Entete extends StatelessWidget {
+/// Titre du chapitre + ligne de statut de progression REELLE (etape 22). Lit
+/// l'etat via [etatChapitreProvider] (defaut « A faire ») et se rafraichit tout
+/// seul apres une modification (flux `.watch()`). « Modifier » ouvre le selecteur.
+class _Entete extends ConsumerWidget {
   const _Entete({required this.chapitre});
 
   final Chapitre chapitre;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final etat =
+        ref.watch(etatChapitreProvider(chapitre.id)).value ??
+        EtatProgression.aFaire;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -129,10 +139,14 @@ class _Entete extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            // Toujours « A faire » a cette etape : aucune progression enregistree.
-            const _StatutChip(etat: EtatProgression.aFaire),
+            StatutProgressionChip(etat: etat),
             const Spacer(),
-            const _BoutonModifierStatut(),
+            // Cible tactile 48 px (comme « Mot de passe oublie ? », etape 13).
+            TextButton(
+              style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+              onPressed: () => _modifierStatut(context, ref, chapitre.id, etat),
+              child: const Text('Modifier'),
+            ),
           ],
         ),
       ],
@@ -140,48 +154,102 @@ class _Entete extends StatelessWidget {
   }
 }
 
-/// La pastille de statut. Le sens est porte par le TEXTE (jamais la seule
-/// couleur, SPEC §6.2) ; le libelle vient de l'enum (`libelleAffichage`).
-class _StatutChip extends StatelessWidget {
-  const _StatutChip({required this.etat});
+/// Ouvre le selecteur des 4 etats et enregistre le choix (ecriture locale
+/// d'abord, meme hors-ligne). Un invite ne peut pas persister de progression
+/// (RLS `to authenticated`) : on l'invite a creer un compte plutot que de laisser
+/// une action sans effet. Un retour est confirme par un SnackBar (SPEC : toute
+/// action donne un retour a l'eleve).
+Future<void> _modifierStatut(
+  BuildContext context,
+  WidgetRef ref,
+  String chapitreId,
+  EtatProgression etatActuel,
+) async {
+  if (ref.read(etatAuthProvider) is! AuthConnecte) {
+    _afficherMessage(context, 'Cree un compte pour suivre ta progression.');
+    return;
+  }
+  final choisi = await showModalBottomSheet<EtatProgression>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => _SelecteurStatut(etatActuel: etatActuel),
+  );
+  if (choisi == null || choisi == etatActuel) return;
+  await ref
+      .read(suiviProgressionProvider)
+      .definirEtat(chapitreId: chapitreId, etat: choisi);
+  if (context.mounted) {
+    _afficherMessage(context, 'Statut : ${choisi.libelleAffichage}');
+  }
+}
 
-  final EtatProgression etat;
+/// Le selecteur des 4 etats (feuille du bas). Chaque option porte icone + libelle
+/// + couleur ; l'etat courant porte une COCHE (la selection ne repose jamais sur
+/// la seule couleur, SPEC §6.2). L'option « Fait » rappelle la regle metier
+/// (GLOSSAIRE §5) : un chapitre est « fait » quand sa fiche de revision est
+/// validee — le choix reste manuel a cette etape (pas encore de moteur de
+/// correction), d'ou ce rappel affiche au moment de choisir.
+class _SelecteurStatut extends StatelessWidget {
+  const _SelecteurStatut({required this.etatActuel});
+
+  final EtatProgression etatActuel;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        child: Text(
-          etat.libelleAffichage,
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+            child: Text(
+              'Ou en es-tu ?',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
-        ),
+          for (final etat in EtatProgression.values)
+            _OptionStatut(etat: etat, selectionne: etat == etatActuel),
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }
 }
 
-/// « Modifier » le statut : placeholder tant que la progression n'existe pas
-/// (meme motif que « Mot de passe oublie ? » a l'etape 13). Cible tactile 48 px.
-class _BoutonModifierStatut extends StatelessWidget {
-  const _BoutonModifierStatut();
+/// Une option du selecteur : icone coloree + libelle, coche si c'est l'etat
+/// courant. « Fait » ajoute la regle metier en sous-titre.
+class _OptionStatut extends StatelessWidget {
+  const _OptionStatut({required this.etat, required this.selectionne});
+
+  final EtatProgression etat;
+  final bool selectionne;
 
   @override
   Widget build(BuildContext context) {
-    return TextButton(
-      style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
-      onPressed: () =>
-          _afficherBientot(context, 'Le suivi de progression arrive bientot.'),
-      child: const Text('Modifier'),
+    final theme = Theme.of(context);
+    return ListTile(
+      selected: selectionne,
+      leading: Icon(
+        iconeStatut(etat),
+        color: couleursStatut(context, etat).premier,
+      ),
+      title: Text(etat.libelleAffichage),
+      subtitle: etat == EtatProgression.fait
+          ? Text(
+              'Fait signifie que tu as valide ta fiche de revision.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            )
+          : null,
+      trailing: selectionne
+          ? Icon(Icons.check, color: theme.colorScheme.primary)
+          : null,
+      onTap: () => Navigator.of(context).pop(etat),
     );
   }
 }
@@ -448,10 +516,9 @@ class _EtatErreur extends StatelessWidget {
   }
 }
 
-/// Un placeholder homogene : les actions pas encore construites (ouvrir un
-/// document, modifier la progression) le disent clairement plutot que de ne rien
-/// faire. A remplacer par la vraie action a l'etape correspondante.
-void _afficherBientot(BuildContext context, String message) {
+/// Un retour bref a l'eleve (confirmation d'un changement de statut, ou invitation
+/// a creer un compte). Remplace tout SnackBar hidden en cours par le nouveau.
+void _afficherMessage(BuildContext context, String message) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(message)));
