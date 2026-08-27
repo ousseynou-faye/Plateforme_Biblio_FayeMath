@@ -14,12 +14,14 @@ import 'package:fayemath_academy/data/repositories/auth_repository.dart';
 import 'package:fayemath_academy/data/repositories/catalogue_repository.dart';
 import 'package:fayemath_academy/data/repositories/chapitre_repository.dart';
 import 'package:fayemath_academy/data/repositories/profil_repository.dart';
+import 'package:fayemath_academy/data/repositories/progression_repository.dart';
 import 'package:fayemath_academy/data/repositories/ressource_repository.dart';
 import 'package:fayemath_academy/data/repositories/telechargement_repository.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
+import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
 
@@ -96,6 +98,11 @@ Future<void> main() async {
         ),
         profilRepositoryProvider.overrideWith(
           (ref) => ProfilRepositoryOfflineFirst(baseLocale, client),
+        ),
+        // Suivi de progression (etape 22) : ecriture LOCALE d'abord (Drift) +
+        // pousse Supabase best-effort. Meme base locale partagee.
+        progressionRepositoryProvider.overrideWith(
+          (ref) => ProgressionRepositoryOfflineFirst(baseLocale, client),
         ),
         // Moteur de telechargement hors-ligne (etape 19) : URL signee Supabase +
         // transfert dio + trace en base. Ecrit le PDF dans l'espace prive de
