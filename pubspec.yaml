@@ -77,6 +77,14 @@ dependencies:
   # offline-first). Enrobe dans core/network/DetecteurReseau.
   connectivity_plus: ^7.3.1
 
+  # Generation d'UUID v4 cote client (etape 22, suivi de progression) : permet
+  # d'ecrire une progression en LOCAL immediatement, sans attendre le serveur
+  # pour l'identifiant. La colonne Supabase `progression.id` (uuid default
+  # gen_random_uuid) accepte une valeur fournie -> pas de remappage d'id a
+  # l'etape 23. Paquet de reference Dart, publisher verifie, sans dependance
+  # lourde (memes criteres que connectivity_plus).
+  uuid: ^4.5.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
