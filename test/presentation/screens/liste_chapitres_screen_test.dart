@@ -123,6 +123,9 @@ class _FauxProgressionRepository implements ProgressionRepository {
   }) async {
     etats[chapitreId] = etat;
   }
+
+  @override
+  Future<void> synchroniser({required String utilisateurId}) async {}
 }
 
 const _maths = Matiere(id: 'm-maths', nom: 'Mathématiques');

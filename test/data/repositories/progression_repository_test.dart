@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fayemath_academy/data/local/base_locale.dart';
 import 'package:fayemath_academy/data/repositories/progression_repository.dart';
 import 'package:fayemath_academy/domain/entities/etat_progression.dart';
+import 'package:fayemath_academy/domain/entities/progression.dart';
 
 /// Tests du volet LOCAL du repository (le seul deterministe hors appareil) :
 /// lecture avec defaut `aFaire`, ecriture (id genere + date posee), et
@@ -135,4 +136,160 @@ void main() {
       expect(etats.containsKey('ch3'), isFalse);
     },
   );
+
+  // --- Etape 23 : file de synchro + plan de reconciliation --------------------
+
+  test('definirEtat marque la ligne « en attente » de synchro', () async {
+    await repo.definirEtat(
+      utilisateurId: 'u1',
+      chapitreId: 'ch1',
+      etat: EtatProgression.enCours,
+    );
+    // La pousse best-effort echoue (Supabase injoignable) -> la ligne reste en
+    // attente : c'est exactement l'etat d'une ecriture faite hors-ligne.
+    final ligne = (await base.select(base.progressions).get()).single;
+    expect(ligne.enAttenteSync, isTrue);
+  });
+
+  group('planifier (regle de reconciliation appliquee au snapshot)', () {
+    // Deux instants reperes.
+    final ancien = DateTime(2026, 8, 29, 10);
+    final recent = DateTime(2026, 8, 29, 12);
+
+    ProgressionLocale locale(
+      String chapitreId, {
+      required bool enAttente,
+      required DateTime dateMaj,
+      EtatProgression etat = EtatProgression.enCours,
+    }) => ProgressionLocale(
+      id: 'loc-$chapitreId',
+      utilisateurId: 'u1',
+      chapitreId: chapitreId,
+      etat: etat.valeurSql,
+      dateMaj: dateMaj,
+      enAttenteSync: enAttente,
+    );
+
+    Progression serveur(
+      String chapitreId, {
+      required DateTime dateMaj,
+      EtatProgression etat = EtatProgression.fait,
+    }) => Progression(
+      id: 'srv-$chapitreId',
+      utilisateurId: 'u1',
+      chapitreId: chapitreId,
+      etat: etat,
+      dateMaj: dateMaj,
+    );
+
+    test('local en attente, aucun serveur -> a pousser', () {
+      final plan = ProgressionRepositoryOfflineFirst.planifier(
+        locales: [locale('ch1', enAttente: true, dateMaj: recent)],
+        serveur: const [],
+      );
+      expect(plan.aPousser.map((p) => p.chapitreId), ['ch1']);
+      expect(plan.aAdopter, isEmpty);
+    });
+
+    test('serveur seul (rien en local) -> a adopter', () {
+      final plan = ProgressionRepositoryOfflineFirst.planifier(
+        locales: const [],
+        serveur: [serveur('ch1', dateMaj: recent)],
+      );
+      expect(plan.aAdopter.map((p) => p.chapitreId), ['ch1']);
+      expect(plan.aPousser, isEmpty);
+    });
+
+    test('local en attente mais serveur plus recent (conflit) -> a adopter', () {
+      final plan = ProgressionRepositoryOfflineFirst.planifier(
+        locales: [locale('ch1', enAttente: true, dateMaj: ancien)],
+        serveur: [serveur('ch1', dateMaj: recent)],
+      );
+      expect(plan.aAdopter.map((p) => p.chapitreId), ['ch1']);
+      expect(plan.aPousser, isEmpty);
+    });
+
+    test('local synchronise + serveur plus ancien -> rien des deux cotes', () {
+      final plan = ProgressionRepositoryOfflineFirst.planifier(
+        locales: [locale('ch1', enAttente: false, dateMaj: recent)],
+        serveur: [serveur('ch1', dateMaj: ancien)],
+      );
+      expect(plan.aAdopter, isEmpty);
+      expect(plan.aPousser, isEmpty);
+    });
+
+    test('plusieurs chapitres en un plan : chacun sa decision', () {
+      final plan = ProgressionRepositoryOfflineFirst.planifier(
+        locales: [
+          locale('ch1', enAttente: true, dateMaj: recent), // pousser
+          locale('ch2', enAttente: false, dateMaj: ancien), // serveur + recent
+        ],
+        serveur: [
+          serveur('ch2', dateMaj: recent), // adopter
+          serveur('ch3', dateMaj: recent), // serveur seul -> adopter
+        ],
+      );
+      expect(plan.aPousser.map((p) => p.chapitreId), ['ch1']);
+      expect(
+        plan.aAdopter.map((p) => p.chapitreId).toSet(),
+        {'ch2', 'ch3'},
+      );
+    });
+  });
+
+  group('appliquerAdoptions (ecriture locale des valeurs serveur)', () {
+    Progression serveur(String id, String chapitreId, EtatProgression etat) =>
+        Progression(
+          id: id,
+          utilisateurId: 'u1',
+          chapitreId: chapitreId,
+          etat: etat,
+          dateMaj: DateTime(2026, 8, 29, 12),
+        );
+
+    test('serveur seul -> insere en local, NON en attente', () async {
+      await repo.appliquerAdoptions([
+        serveur('srv-ch1', 'ch1', EtatProgression.fait),
+      ]);
+
+      final ligne = (await base.select(base.progressions).get()).single;
+      expect(ligne.id, 'srv-ch1');
+      expect(ligne.etat, EtatProgression.fait.valeurSql);
+      expect(ligne.enAttenteSync, isFalse);
+    });
+
+    test(
+      'conflit 2 appareils (id local != id serveur) -> UNE seule ligne, id serveur',
+      () async {
+        // Une ligne locale « en attente » avec un id genere par cet appareil.
+        await base
+            .into(base.progressions)
+            .insert(
+              ProgressionsCompanion.insert(
+                id: 'loc-ch1',
+                utilisateurId: 'u1',
+                chapitreId: 'ch1',
+                etat: EtatProgression.enCours.valeurSql,
+                dateMaj: DateTime(2026, 8, 29, 10),
+              ),
+            );
+
+        // Le serveur, plus recent, porte un AUTRE id (autre appareil a cree la ligne).
+        await repo.appliquerAdoptions([
+          serveur('srv-ch1', 'ch1', EtatProgression.fait),
+        ]);
+
+        final lignes = await base.select(base.progressions).get();
+        expect(lignes, hasLength(1), reason: 'pas de doublon (delete+insert)');
+        expect(lignes.single.id, 'srv-ch1');
+        expect(lignes.single.etat, EtatProgression.fait.valeurSql);
+        expect(lignes.single.enAttenteSync, isFalse);
+      },
+    );
+
+    test('liste vide -> aucune ecriture', () async {
+      await repo.appliquerAdoptions(const []);
+      expect(await base.select(base.progressions).get(), isEmpty);
+    });
+  });
 }

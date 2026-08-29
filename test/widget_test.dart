@@ -154,6 +154,9 @@ class _FauxProgressionRepository implements ProgressionRepository {
     required String chapitreId,
     required EtatProgression etat,
   }) async {}
+
+  @override
+  Future<void> synchroniser({required String utilisateurId}) async {}
 }
 
 /// Faux moteur de telechargement : rien sur le disque, flux inerte (la

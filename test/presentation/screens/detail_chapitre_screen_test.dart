@@ -87,6 +87,9 @@ class _FauxProgressionRepository implements ProgressionRepository {
     dernierEtatEcrit = etat;
     etats[chapitreId] = etat;
   }
+
+  @override
+  Future<void> synchroniser({required String utilisateurId}) async {}
 }
 
 const _chapitre = Chapitre(

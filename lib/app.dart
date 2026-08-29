@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:fayemath_academy/core/theme/theme.dart';
+import 'package:fayemath_academy/presentation/providers/synchronisation_progression_provider.dart';
 import 'package:fayemath_academy/routing/app_router.dart';
 
 /// Widget racine de l'application. `ConsumerWidget` car il lit le routeur, qui
@@ -17,6 +18,10 @@ class FayeMathApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    // Maintient en vie le declencheur de synchronisation de la progression
+    // (etape 23) : il ecoute le retour du reseau et la connexion pour vider la
+    // file d'attente. N'expose aucune valeur -> ne provoque aucune reconstruction.
+    ref.watch(synchronisationProgressionProvider);
     return MaterialApp.router(
       title: 'FayeMath Academy',
       // Charte graphique centralisee dans core/theme/ (etape 11).

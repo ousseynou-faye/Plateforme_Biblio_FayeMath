@@ -53,4 +53,20 @@ abstract interface class ProgressionRepository {
     required String chapitreId,
     required EtatProgression etat,
   });
+
+  /// Vide la file d'attente et reconcilie la progression locale avec le serveur
+  /// (etape 23, Feuille de Route doc 04 : « la file d'attente se vide au retour du
+  /// reseau, la version la plus recente l'emporte »). Declenchee AUTOMATIQUEMENT
+  /// au retour du reseau (pas de bouton) par le declencheur de `presentation/`.
+  ///
+  /// Deux mouvements, chapitre par chapitre, arbitres par la regle pure
+  /// `ReconciliationProgression` :
+  ///  - POUSSER les ecritures locales « en attente » qui l'emportent ;
+  ///  - ADOPTER en local les valeurs serveur plus recentes (ou absentes en local).
+  ///
+  /// BEST-EFFORT comme le reste du contrat hors-ligne : si le reseau lache en
+  /// cours de route, on abandonne en silence (rien n'est perdu — les ecritures
+  /// locales restent « en attente » et repartiront au prochain retour du reseau).
+  /// Ne leve donc jamais d'echec.
+  Future<void> synchroniser({required String utilisateurId});
 }
