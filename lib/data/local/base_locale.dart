@@ -90,6 +90,15 @@ class Progressions extends Table {
   TextColumn get etat => text()();
   DateTimeColumn get dateMaj => dateTime()();
 
+  // EXCEPTION a la regle « miroir exact du serveur » ci-dessus : cette colonne
+  // n'existe PAS cote serveur. C'est le drapeau de la file de synchro (etape 23) :
+  // `true` = ecriture locale pas encore confirmee cote serveur (« en attente »),
+  // remise a `false` apres un push reussi. Defaut `true` : toute ecriture locale
+  // (definirEtat) est en attente tant qu'elle n'est pas poussee, et les lignes
+  // migrees d'une base v2 (sans la colonne) valent `true` -> re-poussees au
+  // prochain retour reseau (upsert idempotent, aucune ecriture hors-ligne perdue).
+  BoolColumn get enAttenteSync => boolean().withDefault(const Constant(true))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -139,18 +148,27 @@ class BaseLocale extends _$BaseLocale {
   BaseLocale.avecExecuteur(super.executeur);
 
   // v1 = la table de demonstration `LignesDemo` (etape 10). v2 = le vrai schema.
+  // v3 = ajout du drapeau de file de synchro `progressions.enAttenteSync` (etape 23).
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (m, from, to) async {
-      // La base locale est un miroir reconstructible du serveur : on jette la
-      // table de demonstration jetable et on cree le vrai schema. (La vraie
-      // mecanique de synchronisation viendra en Phase 3 ; ici, aucune donnee
-      // reelle n'existe encore a preserver.)
-      await m.database.customStatement('DROP TABLE IF EXISTS lignes_demo');
-      await m.createAll();
+      if (from < 2) {
+        // v1 -> v2/v3 : la base locale est un miroir reconstructible du serveur.
+        // On jette la table de demonstration jetable et on cree le vrai schema
+        // COURANT en une fois (`createAll` inclut deja `enAttenteSync`) — d'ou le
+        // `else` : ne pas re-ajouter ensuite une colonne qui vient d'etre creee.
+        await m.database.customStatement('DROP TABLE IF EXISTS lignes_demo');
+        await m.createAll();
+      } else if (from < 3) {
+        // v2 -> v3 : la table `progressions` existe deja sans le drapeau ; on
+        // ajoute seulement la colonne. Les lignes existantes prennent son defaut
+        // (`true`) -> re-poussees au prochain retour reseau (upsert idempotent),
+        // pour ne perdre aucune modification faite hors-ligne sous l'etape 22.
+        await m.addColumn(progressions, progressions.enAttenteSync);
+      }
     },
   );
 

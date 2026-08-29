@@ -1993,6 +1993,21 @@ class $ProgressionsTable extends Progressions
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _enAttenteSyncMeta = const VerificationMeta(
+    'enAttenteSync',
+  );
+  @override
+  late final GeneratedColumn<bool> enAttenteSync = GeneratedColumn<bool>(
+    'en_attente_sync',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("en_attente_sync" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2000,6 +2015,7 @@ class $ProgressionsTable extends Progressions
     chapitreId,
     etat,
     dateMaj,
+    enAttenteSync,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2053,6 +2069,15 @@ class $ProgressionsTable extends Progressions
     } else if (isInserting) {
       context.missing(_dateMajMeta);
     }
+    if (data.containsKey('en_attente_sync')) {
+      context.handle(
+        _enAttenteSyncMeta,
+        enAttenteSync.isAcceptableOrUnknown(
+          data['en_attente_sync']!,
+          _enAttenteSyncMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2082,6 +2107,10 @@ class $ProgressionsTable extends Progressions
         DriftSqlType.dateTime,
         data['${effectivePrefix}date_maj'],
       )!,
+      enAttenteSync: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}en_attente_sync'],
+      )!,
     );
   }
 
@@ -2098,12 +2127,14 @@ class ProgressionLocale extends DataClass
   final String chapitreId;
   final String etat;
   final DateTime dateMaj;
+  final bool enAttenteSync;
   const ProgressionLocale({
     required this.id,
     required this.utilisateurId,
     required this.chapitreId,
     required this.etat,
     required this.dateMaj,
+    required this.enAttenteSync,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2113,6 +2144,7 @@ class ProgressionLocale extends DataClass
     map['chapitre_id'] = Variable<String>(chapitreId);
     map['etat'] = Variable<String>(etat);
     map['date_maj'] = Variable<DateTime>(dateMaj);
+    map['en_attente_sync'] = Variable<bool>(enAttenteSync);
     return map;
   }
 
@@ -2123,6 +2155,7 @@ class ProgressionLocale extends DataClass
       chapitreId: Value(chapitreId),
       etat: Value(etat),
       dateMaj: Value(dateMaj),
+      enAttenteSync: Value(enAttenteSync),
     );
   }
 
@@ -2137,6 +2170,7 @@ class ProgressionLocale extends DataClass
       chapitreId: serializer.fromJson<String>(json['chapitreId']),
       etat: serializer.fromJson<String>(json['etat']),
       dateMaj: serializer.fromJson<DateTime>(json['dateMaj']),
+      enAttenteSync: serializer.fromJson<bool>(json['enAttenteSync']),
     );
   }
   @override
@@ -2148,6 +2182,7 @@ class ProgressionLocale extends DataClass
       'chapitreId': serializer.toJson<String>(chapitreId),
       'etat': serializer.toJson<String>(etat),
       'dateMaj': serializer.toJson<DateTime>(dateMaj),
+      'enAttenteSync': serializer.toJson<bool>(enAttenteSync),
     };
   }
 
@@ -2157,12 +2192,14 @@ class ProgressionLocale extends DataClass
     String? chapitreId,
     String? etat,
     DateTime? dateMaj,
+    bool? enAttenteSync,
   }) => ProgressionLocale(
     id: id ?? this.id,
     utilisateurId: utilisateurId ?? this.utilisateurId,
     chapitreId: chapitreId ?? this.chapitreId,
     etat: etat ?? this.etat,
     dateMaj: dateMaj ?? this.dateMaj,
+    enAttenteSync: enAttenteSync ?? this.enAttenteSync,
   );
   ProgressionLocale copyWithCompanion(ProgressionsCompanion data) {
     return ProgressionLocale(
@@ -2175,6 +2212,9 @@ class ProgressionLocale extends DataClass
           : this.chapitreId,
       etat: data.etat.present ? data.etat.value : this.etat,
       dateMaj: data.dateMaj.present ? data.dateMaj.value : this.dateMaj,
+      enAttenteSync: data.enAttenteSync.present
+          ? data.enAttenteSync.value
+          : this.enAttenteSync,
     );
   }
 
@@ -2185,13 +2225,15 @@ class ProgressionLocale extends DataClass
           ..write('utilisateurId: $utilisateurId, ')
           ..write('chapitreId: $chapitreId, ')
           ..write('etat: $etat, ')
-          ..write('dateMaj: $dateMaj')
+          ..write('dateMaj: $dateMaj, ')
+          ..write('enAttenteSync: $enAttenteSync')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, utilisateurId, chapitreId, etat, dateMaj);
+  int get hashCode =>
+      Object.hash(id, utilisateurId, chapitreId, etat, dateMaj, enAttenteSync);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2200,7 +2242,8 @@ class ProgressionLocale extends DataClass
           other.utilisateurId == this.utilisateurId &&
           other.chapitreId == this.chapitreId &&
           other.etat == this.etat &&
-          other.dateMaj == this.dateMaj);
+          other.dateMaj == this.dateMaj &&
+          other.enAttenteSync == this.enAttenteSync);
 }
 
 class ProgressionsCompanion extends UpdateCompanion<ProgressionLocale> {
@@ -2209,6 +2252,7 @@ class ProgressionsCompanion extends UpdateCompanion<ProgressionLocale> {
   final Value<String> chapitreId;
   final Value<String> etat;
   final Value<DateTime> dateMaj;
+  final Value<bool> enAttenteSync;
   final Value<int> rowid;
   const ProgressionsCompanion({
     this.id = const Value.absent(),
@@ -2216,6 +2260,7 @@ class ProgressionsCompanion extends UpdateCompanion<ProgressionLocale> {
     this.chapitreId = const Value.absent(),
     this.etat = const Value.absent(),
     this.dateMaj = const Value.absent(),
+    this.enAttenteSync = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ProgressionsCompanion.insert({
@@ -2224,6 +2269,7 @@ class ProgressionsCompanion extends UpdateCompanion<ProgressionLocale> {
     required String chapitreId,
     required String etat,
     required DateTime dateMaj,
+    this.enAttenteSync = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        utilisateurId = Value(utilisateurId),
@@ -2236,6 +2282,7 @@ class ProgressionsCompanion extends UpdateCompanion<ProgressionLocale> {
     Expression<String>? chapitreId,
     Expression<String>? etat,
     Expression<DateTime>? dateMaj,
+    Expression<bool>? enAttenteSync,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2244,6 +2291,7 @@ class ProgressionsCompanion extends UpdateCompanion<ProgressionLocale> {
       if (chapitreId != null) 'chapitre_id': chapitreId,
       if (etat != null) 'etat': etat,
       if (dateMaj != null) 'date_maj': dateMaj,
+      if (enAttenteSync != null) 'en_attente_sync': enAttenteSync,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2254,6 +2302,7 @@ class ProgressionsCompanion extends UpdateCompanion<ProgressionLocale> {
     Value<String>? chapitreId,
     Value<String>? etat,
     Value<DateTime>? dateMaj,
+    Value<bool>? enAttenteSync,
     Value<int>? rowid,
   }) {
     return ProgressionsCompanion(
@@ -2262,6 +2311,7 @@ class ProgressionsCompanion extends UpdateCompanion<ProgressionLocale> {
       chapitreId: chapitreId ?? this.chapitreId,
       etat: etat ?? this.etat,
       dateMaj: dateMaj ?? this.dateMaj,
+      enAttenteSync: enAttenteSync ?? this.enAttenteSync,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2284,6 +2334,9 @@ class ProgressionsCompanion extends UpdateCompanion<ProgressionLocale> {
     if (dateMaj.present) {
       map['date_maj'] = Variable<DateTime>(dateMaj.value);
     }
+    if (enAttenteSync.present) {
+      map['en_attente_sync'] = Variable<bool>(enAttenteSync.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2298,6 +2351,7 @@ class ProgressionsCompanion extends UpdateCompanion<ProgressionLocale> {
           ..write('chapitreId: $chapitreId, ')
           ..write('etat: $etat, ')
           ..write('dateMaj: $dateMaj, ')
+          ..write('enAttenteSync: $enAttenteSync, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4159,6 +4213,7 @@ typedef $$ProgressionsTableCreateCompanionBuilder =
       required String chapitreId,
       required String etat,
       required DateTime dateMaj,
+      Value<bool> enAttenteSync,
       Value<int> rowid,
     });
 typedef $$ProgressionsTableUpdateCompanionBuilder =
@@ -4168,6 +4223,7 @@ typedef $$ProgressionsTableUpdateCompanionBuilder =
       Value<String> chapitreId,
       Value<String> etat,
       Value<DateTime> dateMaj,
+      Value<bool> enAttenteSync,
       Value<int> rowid,
     });
 
@@ -4202,6 +4258,11 @@ class $$ProgressionsTableFilterComposer
 
   ColumnFilters<DateTime> get dateMaj => $composableBuilder(
     column: $table.dateMaj,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get enAttenteSync => $composableBuilder(
+    column: $table.enAttenteSync,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4239,6 +4300,11 @@ class $$ProgressionsTableOrderingComposer
     column: $table.dateMaj,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get enAttenteSync => $composableBuilder(
+    column: $table.enAttenteSync,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ProgressionsTableAnnotationComposer
@@ -4268,6 +4334,11 @@ class $$ProgressionsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get dateMaj =>
       $composableBuilder(column: $table.dateMaj, builder: (column) => column);
+
+  GeneratedColumn<bool> get enAttenteSync => $composableBuilder(
+    column: $table.enAttenteSync,
+    builder: (column) => column,
+  );
 }
 
 class $$ProgressionsTableTableManager
@@ -4306,6 +4377,7 @@ class $$ProgressionsTableTableManager
                 Value<String> chapitreId = const Value.absent(),
                 Value<String> etat = const Value.absent(),
                 Value<DateTime> dateMaj = const Value.absent(),
+                Value<bool> enAttenteSync = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ProgressionsCompanion(
                 id: id,
@@ -4313,6 +4385,7 @@ class $$ProgressionsTableTableManager
                 chapitreId: chapitreId,
                 etat: etat,
                 dateMaj: dateMaj,
+                enAttenteSync: enAttenteSync,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -4322,6 +4395,7 @@ class $$ProgressionsTableTableManager
                 required String chapitreId,
                 required String etat,
                 required DateTime dateMaj,
+                Value<bool> enAttenteSync = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ProgressionsCompanion.insert(
                 id: id,
@@ -4329,6 +4403,7 @@ class $$ProgressionsTableTableManager
                 chapitreId: chapitreId,
                 etat: etat,
                 dateMaj: dateMaj,
+                enAttenteSync: enAttenteSync,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
