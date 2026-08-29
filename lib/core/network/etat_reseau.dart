@@ -14,9 +14,12 @@ enum EtatReseau {
   /// c'est un mode de fonctionnement normal (CONVENTIONS §5, contrat hors-ligne).
   horsLigne,
 
-  /// Transitoire : le reseau vient de revenir apres une coupure. Pendant l'etape
-  /// 21, cet etat signifie seulement « une resynchronisation en arriere-plan est
-  /// en cours » — il ne vide AUCUNE file d'attente d'ecriture (celle-ci n'existe
-  /// qu'a l'etape 23). Voir TransitionReseau et DetecteurReseau.
+  /// Transitoire : le reseau vient de revenir apres une coupure. C'est la fenetre
+  /// pendant laquelle une resynchronisation en arriere-plan a lieu — depuis
+  /// l'etape 23, cela inclut le VIDAGE de la file d'attente d'ecriture de la
+  /// progression (declenche par `synchronisationProgressionProvider`, qui ecoute
+  /// ce meme retour de reseau). Le bandeau « Reconnexion... » (etape 21) est donc
+  /// aussi le signal visuel de cette synchro. Voir TransitionReseau et
+  /// DetecteurReseau.
   reconnexion,
 }

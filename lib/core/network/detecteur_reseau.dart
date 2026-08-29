@@ -68,10 +68,12 @@ class DetecteurReseau {
 
     if (suivant == EtatReseau.reconnexion) {
       // « Reconnexion... » est transitoire : apres un court delai, si le reseau
-      // tient, on bascule en « En ligne ». ⚠️ ETAPE 23 : c'est ici qu'il faudra
-      // declencher la vidange de la file d'attente d'ecriture hors-ligne — elle
-      // n'existe pas encore, cet etat ne fait donc que signaler une resynchro de
-      // LECTURE en cours (aucune ecriture n'est mise en file a l'etape 21).
+      // tient, on bascule en « En ligne ». Le vidage de la file d'attente
+      // d'ecriture de la progression (etape 23) N'est PAS declenche ici : ce
+      // detecteur garde son seul role (emettre l'etat, non testable car plugin
+      // natif). C'est `synchronisationProgressionProvider` qui ecoute ce meme
+      // retour de reseau et lance la synchro — logique deportee la ou elle est
+      // testable (cf. le triptyque de l'etape 21).
       _minuteurReconnexion = Timer(_dureeReconnexion, () {
         if (_courant == EtatReseau.reconnexion && !_sortie.isClosed) {
           _courant = EtatReseau.enLigne;
