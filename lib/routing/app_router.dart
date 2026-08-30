@@ -14,6 +14,7 @@ import 'package:fayemath_academy/presentation/screens/demarrage_screen.dart';
 import 'package:fayemath_academy/presentation/screens/detail_chapitre_screen.dart';
 import 'package:fayemath_academy/presentation/screens/lecteur_document_screen.dart';
 import 'package:fayemath_academy/presentation/screens/liste_chapitres_screen.dart';
+import 'package:fayemath_academy/presentation/screens/ma_progression_screen.dart';
 import 'package:fayemath_academy/presentation/screens/mes_telechargements_screen.dart';
 import 'package:fayemath_academy/presentation/screens/profil_screen.dart';
 import 'package:fayemath_academy/presentation/screens/tableau_bord_screen.dart';
@@ -24,20 +25,28 @@ const cheminDemarrage = '/demarrage';
 const cheminConnexion = '/connexion';
 const cheminChoixClasse = '/choix-classe';
 
-/// L'arrivee d'un eleve ayant droit au contenu : l'onglet « Cours » (la liste des
-/// chapitres). C'est la cible de redirection ([_cibleNavigation]). L'onglet
-/// « Accueil » (tableau de bord) est [cheminTableauBord], distinct : atterrir sur
-/// un tableau de bord encore vide serait une regression (l'arrivee basculera dessus
-/// quand il existera, etape 24 — pas l'etape 22, qui ne construit que le suivi de
-/// progression, sans le tableau de bord ni « Ma progression »).
-const cheminAccueil = '/';
+/// L'onglet « Cours » (la liste des chapitres). Historiquement la cible d'arrivee
+/// (quand l'onglet Accueil n'etait qu'un placeholder) ; depuis l'etape 24,
+/// l'arrivee est le tableau de bord [cheminTableauBord] (voir [_cibleNavigation]).
+const cheminCours = '/';
 
-/// Les trois autres racines d'onglet de la coquille (barre du bas a 4 onglets).
+/// L'onglet « Accueil » = le tableau de bord (ecran 4). Depuis l'etape 24, c'est la
+/// CIBLE D'ARRIVEE d'un eleve ayant droit au contenu ([_cibleNavigation]) : le
+/// tableau de bord existe enfin (progression globale + acces a « Ma progression »),
+/// donc y atterrir n'est plus une regression comme au temps du placeholder.
 const cheminTableauBord = '/accueil';
+
+/// Les deux autres racines d'onglet de la coquille (barre du bas a 4 onglets).
 const cheminMesTelechargements = '/mes-telechargements';
 const cheminProfil = '/profil';
 
 const cheminChapitre = '/chapitre';
+
+/// « Ma progression » (ecran 9, etape 24) : route RACINE empilee au-dessus des
+/// onglets (fleche retour, pas de barre du bas), comme le detail et le lecteur.
+/// Atteinte depuis la carte de progression du tableau de bord (onglet Accueil).
+const cheminMaProgression = '/ma-progression';
+const nomRouteMaProgression = 'ma-progression';
 
 /// Nom de la route de detail d'un chapitre. La liste ouvre cet ecran par
 /// `context.pushNamed('chapitre', ...)`. `presentation/` ne peut pas importer
@@ -78,11 +87,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       final ou = state.matchedLocation;
       // Deja au bon endroit -> ne rien faire (evite toute boucle).
       if (ou == cible) return null;
-      // La zone « contenu » (accueil + detail d'un chapitre) forme un tout :
-      // quand l'eleve a droit au contenu (cible = accueil), on ne le rejette pas
-      // d'un sous-ecran de cette zone vers l'accueil — sinon tout `push` vers un
-      // detail rebondirait aussitot.
-      if (cible == cheminAccueil && _estZoneContenu(ou)) return null;
+      // La zone « contenu » (les 4 onglets + detail / lecteur / Ma progression)
+      // forme un tout : quand l'eleve a droit au contenu (cible = tableau de bord,
+      // l'onglet d'arrivee), on ne le rejette pas d'un sous-ecran de cette zone
+      // vers l'accueil — sinon tout changement d'onglet ou `push` rebondirait.
+      if (cible == cheminTableauBord && _estZoneContenu(ou)) return null;
       return cible;
     },
     routes: [
@@ -116,7 +125,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: cheminAccueil,
+                path: cheminCours,
                 builder: (context, state) => const ListeChapitresScreen(),
               ),
             ],
@@ -176,6 +185,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           return const _RepliAccueil();
         },
       ),
+      // « Ma progression » (ecran 9) : route RACINE (au-dessus des onglets), sans
+      // argument — tout vient des providers reactifs. Empilee depuis l'onglet Accueil.
+      GoRoute(
+        name: nomRouteMaProgression,
+        path: cheminMaProgression,
+        builder: (context, state) => const MaProgressionScreen(),
+      ),
     ],
   );
 });
@@ -187,10 +203,11 @@ final routerProvider = Provider<GoRouter>((ref) {
 /// rebondirait vers l'accueil). Un eleve SANS droit (deconnecte / sans classe) a,
 /// lui, une cible differente : il reste redirige, cette exception ne s'applique pas.
 bool _estZoneContenu(String emplacement) =>
-    emplacement == cheminAccueil ||
+    emplacement == cheminCours ||
     emplacement == cheminTableauBord ||
     emplacement == cheminMesTelechargements ||
     emplacement == cheminProfil ||
+    emplacement == cheminMaProgression ||
     emplacement.startsWith('$cheminChapitre/');
 
 /// Ou l'utilisateur doit-il se trouver, selon son etat d'auth et — s'il est
@@ -202,10 +219,12 @@ String _cibleNavigation(Ref ref) {
   return switch (etatAuth) {
     AuthDeconnecte() => cheminConnexion,
     AuthInvite() =>
-      ref.read(choixClasseProvider).valide ? cheminAccueil : cheminChoixClasse,
+      ref.read(choixClasseProvider).valide
+          ? cheminTableauBord
+          : cheminChoixClasse,
     AuthConnecte() => switch (ref.read(profilProvider)) {
       ProfilResolu(:final classeChoisie) =>
-        classeChoisie ? cheminAccueil : cheminChoixClasse,
+        classeChoisie ? cheminTableauBord : cheminChoixClasse,
       // Profil pas encore lu, ou etat transitoire juste apres un changement
       // d'auth : ecran de demarrage neutre, le temps de trancher.
       ProfilEnChargement() || ProfilHorsSujet() => cheminDemarrage,
@@ -243,15 +262,16 @@ class _RafraichisseurNavigation extends ChangeNotifier {
 }
 
 /// Repli neutre : on ne peut pas afficher un detail sans son chapitre (`extra`
-/// absent). On revient a l'accueil au frame suivant. Cas limite uniquement : il
-/// n'y a pas de lien profond vers cet ecran en V1 (voir le builder de la route).
+/// absent). On revient au tableau de bord (onglet d'arrivee) au frame suivant. Cas
+/// limite uniquement : il n'y a pas de lien profond vers cet ecran en V1 (voir le
+/// builder de la route).
 class _RepliAccueil extends StatelessWidget {
   const _RepliAccueil();
 
   @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (context.mounted) context.go(cheminAccueil);
+      if (context.mounted) context.go(cheminTableauBord);
     });
     return const SizedBox.shrink();
   }
