@@ -14,10 +14,10 @@ import 'package:fayemath_academy/presentation/widgets/bandeau_reseau_widget.dart
 /// pousses AU-DESSUS de cette coquille (routes racine), donc sans barre d'onglets —
 /// fidele a la maquette (ecrans 6/7 n'en ont pas).
 ///
-/// Deux des quatre onglets (Accueil = tableau de bord, Profil) sont encore des
-/// placeholders : leurs etapes n'existent pas. L'onglet d'ARRIVEE est « Cours »
-/// (la liste des chapitres, ce qui marche aujourd'hui) et non « Accueil » (vide) —
-/// l'arrivee basculera sur Accueil quand le tableau de bord existera (etape 22).
+/// L'onglet « Profil » est encore un placeholder (son etape n'existe pas). Depuis
+/// l'etape 24, l'onglet d'ARRIVEE est « Accueil » = le tableau de bord (ecran 4),
+/// qui donne acces a « Ma progression » (ecran 9) ; l'onglet « Cours » (la liste
+/// des chapitres) reste a un tap sur la barre.
 class CoquilleOnglets extends StatelessWidget {
   const CoquilleOnglets({super.key, required this.navigationShell});
 

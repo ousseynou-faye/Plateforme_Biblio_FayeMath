@@ -37,6 +37,7 @@ import 'package:fayemath_academy/presentation/providers/ressource_provider.dart'
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
 import 'package:fayemath_academy/presentation/screens/detail_chapitre_screen.dart';
 import 'package:fayemath_academy/presentation/screens/lecteur_document_screen.dart';
+import 'package:fayemath_academy/presentation/screens/ma_progression_screen.dart';
 import 'package:fayemath_academy/routing/app_router.dart';
 
 /// Faux repository d'auth : « connecte » si [session] est non nul.
@@ -281,7 +282,8 @@ void main() {
       ),
     );
 
-    expect(find.text('Bientot disponible'), findsOneWidget);
+    // L'arrivee est desormais le tableau de bord (onglet Accueil, etape 24).
+    expect(find.text('Ta progression'), findsOneWidget);
   });
 
   testWidgets('« Continuer sans compte » mene a l\'ecran de choix', (
@@ -325,7 +327,8 @@ void main() {
     await tester.tap(boutonValider);
     await tester.pumpAndSettle();
 
-    expect(find.text('Bientot disponible'), findsOneWidget);
+    // Apres validation, l'arrivee est le tableau de bord (onglet Accueil).
+    expect(find.text('Ta progression'), findsOneWidget);
   });
 
   testWidgets('accueil -> tap sur un chapitre -> ecran de detail (ecran 6)', (
@@ -358,7 +361,10 @@ void main() {
       ],
     );
 
-    // L'accueil liste le chapitre.
+    // L'arrivee est le tableau de bord : on passe a l'onglet « Cours » (la liste),
+    // qui affiche le chapitre.
+    await tester.tap(find.text('Cours'));
+    await tester.pumpAndSettle();
     expect(find.text('Les triangles'), findsOneWidget);
 
     // Tap -> navigation imperative (pushNamed « chapitre ») + redirect qui
@@ -417,7 +423,11 @@ void main() {
       ],
     );
 
-    // Accueil -> detail.
+    // L'arrivee est le tableau de bord : on passe a l'onglet « Cours » (la liste).
+    await tester.tap(find.text('Cours'));
+    await tester.pumpAndSettle();
+
+    // Cours -> detail.
     await tester.tap(find.text('Les triangles'));
     await tester.pumpAndSettle();
     expect(find.byType(DetailChapitreScreen), findsOneWidget);
@@ -556,11 +566,11 @@ void main() {
       ),
     );
 
-    // La coquille enveloppe l'arrivee, et l'onglet actif est « Cours » (la liste
-    // des chapitres, ici en etat vide) et non « Accueil » (le tableau de bord).
+    // La coquille enveloppe l'arrivee, et l'onglet actif est desormais « Accueil »
+    // (le tableau de bord, etape 24), qui affiche la carte « Ta progression ».
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.text('Hors-ligne'), findsOneWidget);
-    expect(find.text('Bientot disponible'), findsOneWidget);
+    expect(find.text('Ta progression'), findsOneWidget);
   });
 
   testWidgets(
@@ -608,6 +618,94 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(NavigationBar), findsNothing);
+      expect(find.text('Ta classe'), findsOneWidget);
+    },
+  );
+
+  // --- Ma progression (ecran 9, etape 24) -----------------------------------
+
+  testWidgets('accueil -> tap « Ma progression » -> ecran 9', (tester) async {
+    await monterApp(
+      tester,
+      auth: _FauxAuthRepository(
+        session: const SessionAuth(utilisateurId: 'u1'),
+      ),
+      catalogue: _catalogue,
+      profil: _FauxProfilRepository(
+        profil: Utilisateur(
+          id: 'u1',
+          classeId: 'c-6e',
+          serie: null,
+          creeLe: DateTime(2026, 8, 13),
+        ),
+      ),
+      chapitres: const [
+        Chapitre(
+          id: 'ch-3',
+          classeId: 'c-6e',
+          matiereId: 'm-maths',
+          numero: 3,
+          titre: 'Les triangles',
+          strate: 'Activites geometriques',
+          ordre: 3,
+        ),
+      ],
+    );
+
+    // L'arrivee est le tableau de bord ; la carte mene a « Ma progression ».
+    await tester.tap(find.text('Ma progression'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MaProgressionScreen), findsOneWidget);
+    expect(find.text('Par matiere'), findsOneWidget);
+  });
+
+  // Negatifs du redirect : « Ma progression » est une route racine de la zone
+  // contenu — un eleve sans droit y est renvoye (comme /chapitre, etape 24).
+  testWidgets(
+    'deconnecte : acces direct a /ma-progression -> renvoye a l\'auth',
+    (tester) async {
+      await monterApp(tester, auth: _FauxAuthRepository());
+      expect(
+        find.widgetWithText(FilledButton, 'Creer mon compte'),
+        findsOneWidget,
+      );
+
+      tester.element(find.byType(Scaffold).first).go(cheminMaProgression);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MaProgressionScreen), findsNothing);
+      expect(
+        find.widgetWithText(FilledButton, 'Creer mon compte'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'sans classe : acces direct a /ma-progression -> renvoye au choix',
+    (tester) async {
+      await monterApp(
+        tester,
+        auth: _FauxAuthRepository(
+          session: const SessionAuth(utilisateurId: 'u1'),
+        ),
+        catalogue: _catalogue,
+        profil: _FauxProfilRepository(
+          profil: Utilisateur(
+            id: 'u1',
+            classeId: null,
+            serie: null,
+            creeLe: DateTime(2026, 8, 13),
+          ),
+        ),
+      );
+      expect(find.text('Ta classe'), findsOneWidget);
+
+      tester.element(find.byType(Scaffold).first).go(cheminMaProgression);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MaProgressionScreen), findsNothing);
       expect(find.text('Ta classe'), findsOneWidget);
     },
   );
