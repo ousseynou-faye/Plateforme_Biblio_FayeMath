@@ -1,8 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/etat_progression.dart';
 import 'package:fayemath_academy/domain/repositories/progression_repository.dart';
+import 'package:fayemath_academy/domain/usecases/agregation_progression.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
+import 'package:fayemath_academy/presentation/providers/bibliotheque_provider.dart';
+import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
 
 /// Fournit l'implementation du contrat de progression. Comme les autres
 /// repositories : NON resolue ici (`presentation/` n'importe pas `data/`,
@@ -86,3 +90,68 @@ class SuiviProgression {
 final suiviProgressionProvider = Provider<SuiviProgression>(
   SuiviProgression.new,
 );
+
+/// L'avancement agrege de l'eleve (anneau global + par matiere + mini-stats par
+/// etat), REACTIF : il combine les chapitres de la bibliotheque courante et la
+/// progression, et se recalcule des que l'un ou l'autre change. Alimente l'ecran
+/// « Ma progression » (ecran 9) et le tableau de bord (ecran 4), etape 24.
+///
+/// V1 : une seule bibliotheque (Maths), donc un seul groupe « par matiere » — mais
+/// la regle pure [AgregationProgression] groupe par `matiereId`, prete pour une 2e
+/// bibliotheque. Le detail loading/erreur suit exactement `bibliothequeCourante`
+/// (memes checks `AsyncValue` explicites, pas de `.when` a re-emballer).
+final avancementProgressionProvider =
+    Provider<AsyncValue<AvancementProgression>>((ref) {
+      final bibAsync = ref.watch(bibliothequeCouranteProvider);
+      final bib = bibAsync.value;
+      if (bib == null) {
+        if (bibAsync.hasError) {
+          return AsyncError(bibAsync.error!, bibAsync.stackTrace!);
+        }
+        if (bibAsync.isLoading) return const AsyncLoading();
+        // data(null) : etat neutre (deconnecte/transitoire) -> agregation vide.
+        return AsyncData(
+          AgregationProgression.calculer(chapitres: const [], etats: const {}),
+        );
+      }
+
+      final chapitresAsync = ref.watch(chapitresProvider(bib.cle));
+      final chapitres = chapitresAsync.value;
+      if (chapitres == null) {
+        return chapitresAsync.hasError
+            ? AsyncError(chapitresAsync.error!, chapitresAsync.stackTrace!)
+            : const AsyncLoading();
+      }
+
+      final etatsAsync = ref.watch(etatsChapitresProvider);
+      final etats = etatsAsync.value;
+      if (etats == null) {
+        return etatsAsync.hasError
+            ? AsyncError(etatsAsync.error!, etatsAsync.stackTrace!)
+            : const AsyncLoading();
+      }
+
+      return AsyncData(
+        AgregationProgression.calculer(chapitres: chapitres, etats: etats),
+      );
+    });
+
+/// Le premier chapitre (par `ordre`) actuellement « a revoir », ou `null` s'il n'y
+/// en a pas (ou tant que les donnees chargent). Alimente la carte « Ta prochaine
+/// action » de l'ecran « Ma progression » (ecran 9, SPEC FAQ Q5 : une action unique,
+/// mise en avant, propose le chapitre a revoir). `null` = pas de carte, jamais une
+/// erreur.
+final prochainChapitreARevoirProvider = Provider<Chapitre?>((ref) {
+  final bib = ref.watch(bibliothequeCouranteProvider).value;
+  if (bib == null) return null;
+  final chapitres = ref.watch(chapitresProvider(bib.cle)).value;
+  if (chapitres == null) return null;
+  final etats = ref.watch(etatsChapitresProvider).value;
+  if (etats == null) return null;
+
+  final tries = [...chapitres]..sort((a, b) => a.ordre.compareTo(b.ordre));
+  for (final chapitre in tries) {
+    if (etats[chapitre.id] == EtatProgression.aRevoir) return chapitre;
+  }
+  return null;
+});
