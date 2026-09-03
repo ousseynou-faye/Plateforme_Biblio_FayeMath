@@ -4,19 +4,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:fayemath_academy/core/theme/couleurs_marque.dart';
+import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/usecases/agregation_progression.dart';
 import 'package:fayemath_academy/presentation/providers/bibliotheque_provider.dart';
 import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
 
 /// Onglet « Accueil » de la barre du bas (maquette V2.1, ecran 4 « Tableau de
-/// bord »), etape 24. Version MINIMALE : une carte de progression compacte (anneau
-/// + « X chapitres sur Y ») qui MENE a l'ecran « Ma progression » (ecran 9), le
-/// detail complet. Remplace le placeholder de l'etape 20.
+/// bord »), etape 24 + complement du 03/09. Deux blocs : la carte de progression
+/// compacte (anneau + « X chapitres sur Y ») qui MENE a « Ma progression » (ecran
+/// 9), puis la section « Ta prochaine etape » (le chapitre a revoir, via
+/// [prochainChapitreARevoirProvider]) qui ouvre son detail.
 ///
-/// DIFFERE (maquette ecran 4, hors perimetre etape 24) : la carte « Seance avec ton
-/// tuteur » (ecran 20, non construit) et « Reprendre les exercices » avec duree
-/// estimee (pas de notion de duree ni de « chapitre en cours de lecture » modelisee).
-/// Pas de « Bonjour {prenom} » : le champ nom a ete retire a l'etape 13.
+/// DIFFERE (maquette ecran 4, donnee absente du modele) : la carte « Seance avec
+/// ton tuteur » (ecran 20 « Aide et tuteur », non cadre) et la DUREE estimee
+/// (« Environ 20 minutes » : aucune notion de duree stockee) — on n'invente pas ce
+/// chiffre. Pas de « Bonjour {prenom} » : le champ nom a ete retire a l'etape 13.
+/// Le bandeau hors-ligne de la maquette n'est PAS duplique ici : le
+/// `BandeauReseauWidget` global (etape 21) couvre deja l'Accueil via la coquille.
 class TableauBordScreen extends ConsumerWidget {
   const TableauBordScreen({super.key});
 
@@ -43,6 +47,9 @@ class TableauBordScreen extends ConsumerWidget {
               AsyncError() => const _CarteIndisponible(),
               _ => const _CarteChargement(),
             },
+            const SizedBox(height: 18),
+            const _TitreSection('Ta prochaine etape'),
+            const _ProchaineEtape(),
           ],
         ),
       ),
@@ -226,6 +233,139 @@ class _CarteIndisponible extends StatelessWidget {
           Expanded(
             child: Text(
               'Ta progression n\'est pas disponible pour le moment.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// La section « Ta prochaine etape » : propose le chapitre a revoir (via
+/// [prochainChapitreARevoirProvider], reutilise de « Ma progression »), ou un etat
+/// positif s'il n'y a rien a revoir. `null` = pas d'erreur, juste « a jour » (ou
+/// donnees encore en chargement — le bref affichage « a jour » est assume).
+class _ProchaineEtape extends ConsumerWidget {
+  const _ProchaineEtape();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final chapitre = ref.watch(prochainChapitreARevoirProvider);
+    return chapitre == null
+        ? const _EtatAJour()
+        : _CarteRevoir(chapitre: chapitre);
+  }
+}
+
+/// Carte « Revoir ce chapitre » — vrai bouton accessible (>= 48 px, Semantics). Le
+/// tap ouvre le detail du chapitre (ecran 6), meme chemin que « Ma progression » et
+/// la liste. Volontairement SANS duree estimee (donnee absente du modele).
+class _CarteRevoir extends StatelessWidget {
+  const _CarteRevoir({required this.chapitre});
+
+  final Chapitre chapitre;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final marque = theme.extension<CouleursMarque>()!;
+    return Semantics(
+      button: true,
+      label: 'Revoir le chapitre ${chapitre.numero}, ${chapitre.titre}',
+      excludeSemantics: true,
+      child: Material(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          // Route racine, litteral car `presentation/` n'importe pas `routing/`
+          // (ARCHITECTURE §3) — meme appel que la carte de « Ma progression ».
+          onTap: () => context.pushNamed(
+            'chapitre',
+            pathParameters: {'chapitreId': chapitre.id},
+            extra: chapitre,
+          ),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              border: Border.all(color: marque.ocreDecoratif),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: scheme.primaryContainer,
+                  ),
+                  child: Icon(Icons.refresh, color: scheme.onPrimaryContainer),
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Revoir ce chapitre',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Chapitre ${chapitre.numero} · ${chapitre.titre}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Etat positif quand aucun chapitre n'est « a revoir » : on encourage plutot que
+/// de laisser une section vide.
+class _EtatAJour extends StatelessWidget {
+  const _EtatAJour();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final marque = theme.extension<CouleursMarque>()!;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle_outline, size: 22, color: marque.succes),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Rien a revoir pour l\'instant. Continue comme ca !',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
