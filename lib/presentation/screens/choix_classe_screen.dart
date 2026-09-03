@@ -12,6 +12,7 @@ import 'package:fayemath_academy/domain/usecases/programme_scolaire.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/choix_classe_provider.dart';
+import 'package:fayemath_academy/presentation/providers/modification_classe_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 import 'package:fayemath_academy/presentation/widgets/bouton_primaire_widget.dart';
 
@@ -82,6 +83,7 @@ class _ChoixClasseScreenState extends ConsumerState<ChoixClasseScreen> {
       // Invite : rien a persister (Decision A). On confirme localement ; la
       // redirection (lot F) mene alors a l'accueil.
       ref.read(choixClasseProvider.notifier).confirmer();
+      _terminerModification();
       return;
     }
 
@@ -92,12 +94,27 @@ class _ChoixClasseScreenState extends ConsumerState<ChoixClasseScreen> {
       await ref
           .read(profilProvider.notifier)
           .enregistrerChoix(classeId: classe.id, serie: serie);
+      // Choix enregistre : on baisse le drapeau de modification (s'il etait leve
+      // par le Profil) pour que la redirection ejecte vers l'accueil. En cas
+      // d'echec au contraire, on le laisse leve pour que l'eleve reste ici et
+      // reessaie.
+      if (mounted) _terminerModification();
     } on EchecEnregistrement catch (echec) {
       if (mounted) _afficherEchec(echec);
     } finally {
       if (mounted) setState(() => _enregistrementEnCours = false);
     }
   }
+
+  /// Baisse le drapeau « modification depuis le Profil » (lot Qualite C). Sans
+  /// effet pendant le choix INITIAL d'onboarding (le drapeau y est deja a faux).
+  ///
+  /// On ne le fait PAS dans `dispose` : modifier un provider au demontage
+  /// declencherait une re-evaluation de la redirection go_router en plein frame
+  /// de navigation. Comme l'ecran est ouvert via `context.go` (pile remplacee,
+  /// donc pas de bouton retour), la seule sortie est « Valider », qui passe ici.
+  void _terminerModification() =>
+      ref.read(modificationClasseProvider.notifier).terminer();
 
   void _afficherEchec(EchecEnregistrement echec) {
     final message = echec.reseau

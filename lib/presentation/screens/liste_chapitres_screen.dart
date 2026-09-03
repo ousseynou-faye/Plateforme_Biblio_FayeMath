@@ -3,13 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:fayemath_academy/core/errors/echecs_authentification.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
 import 'package:fayemath_academy/domain/entities/matiere.dart';
 import 'package:fayemath_academy/domain/entities/etat_progression.dart';
 import 'package:fayemath_academy/domain/usecases/regroupement_par_strate.dart';
-import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/bibliotheque_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
@@ -41,21 +39,7 @@ class ListeChapitresScreen extends ConsumerWidget {
       _ => 'Chapitres',
     };
     return Scaffold(
-      appBar: AppBar(
-        title: Text(titre),
-        actions: [
-          // Bouton de deconnexion PROVISOIRE : l'emplacement definitif est
-          // l'onglet « Profil » de la barre du bas (maquette V2.1, non encore
-          // construit). Present ici pour ne pas perdre l'acquis teste a l'etape 13
-          // (la galerie qui le portait a ete retiree a l'etape 15) et permettre le
-          // test « se deconnecter / se reconnecter » de la Definition of Done.
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Se deconnecter',
-            onPressed: () => _quitter(ref),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(titre)),
       body: SafeArea(
         child: switch (resolution) {
           _CibleEnChargement() => const Center(
@@ -73,23 +57,6 @@ class ListeChapitresScreen extends ConsumerWidget {
   void _rechargerCatalogue(WidgetRef ref) {
     ref.invalidate(classesProvider);
     ref.invalidate(matieresProvider);
-  }
-
-  /// Deconnexion provisoire (voir le commentaire du bouton). Un invite revient
-  /// simplement a l'ecran d'authentification ; un compte connecte est deconnecte
-  /// cote serveur, puis le flux de session ramene lui aussi a cet ecran. Un echec
-  /// de deconnexion serveur n'a rien a afficher ici : la sortie locale suit.
-  Future<void> _quitter(WidgetRef ref) async {
-    final etat = ref.read(etatAuthProvider);
-    if (etat is AuthInvite) {
-      ref.read(etatAuthProvider.notifier).quitterModeInvite();
-      return;
-    }
-    try {
-      await ref.read(authRepositoryProvider).seDeconnecter();
-    } on EchecAuthentification {
-      // La deconnexion locale suit de toute facon ; rien a afficher ici.
-    }
   }
 
   /// Determine la (classe, matiere) a afficher, via le provider partage

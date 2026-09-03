@@ -270,21 +270,7 @@ void main() {
     expect(find.text('Impossible de charger les chapitres.'), findsNothing);
   });
 
-  testWidgets('le bouton de deconnexion (provisoire) declenche seDeconnecter', (
-    tester,
-  ) async {
-    final auth = _FauxAuthRepository(
-      session: const SessionAuth(utilisateurId: 'u1'),
-    );
-    await _monterEcran(tester, chapitres: const [], authRepository: auth);
-
-    // Le bouton est present dans l'AppBar (accessible par son tooltip).
-    final bouton = find.byTooltip('Se deconnecter');
-    expect(bouton, findsOneWidget);
-
-    await tester.tap(bouton);
-    await tester.pump();
-
-    expect(auth.deconnexionAppelee, isTrue);
-  });
+  // La deconnexion, autrefois provisoirement dans l'AppBar de cet ecran, a
+  // demenage vers l'onglet « Profil » (lot Qualite C). Son test vit desormais
+  // dans profil_screen_test.dart.
 }

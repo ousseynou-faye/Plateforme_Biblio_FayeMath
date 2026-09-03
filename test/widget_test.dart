@@ -383,6 +383,82 @@ void main() {
     expect(find.text('Ta progression'), findsOneWidget);
   });
 
+  testWidgets(
+    'Profil -> « Classe, serie et matieres » ouvre le choix, valider ramene a l\'accueil',
+    (tester) async {
+      await monterApp(
+        tester,
+        auth: _FauxAuthRepository(
+          session: const SessionAuth(utilisateurId: 'u1'),
+        ),
+        catalogue: _catalogue,
+        profil: _FauxProfilRepository(
+          profil: Utilisateur(
+            id: 'u1',
+            classeId: 'c-6e',
+            serie: null,
+            creeLe: DateTime(2026, 8, 13),
+          ),
+        ),
+      );
+      expect(find.text('Ta progression'), findsOneWidget);
+
+      // Onglet Profil, puis la ligne de modification de classe.
+      await tester.tap(find.text('Profil'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Classe, serie et matieres'));
+      await tester.pumpAndSettle();
+
+      // L'ecran de choix (ecran 3) s'ouvre malgre une classe deja enregistree
+      // (le drapeau de modification a ete leve par le Profil).
+      expect(find.text('Ta classe'), findsOneWidget);
+
+      // (Re)choisit la 6e et valide -> le drapeau retombe -> ejection vers l'accueil.
+      await tester.tap(find.text('6e'));
+      await tester.pumpAndSettle();
+      final valider = find.widgetWithText(FilledButton, 'Valider');
+      await tester.ensureVisible(valider);
+      await tester.tap(valider);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ta progression'), findsOneWidget);
+      expect(find.text('Ta classe'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'ayant-droit : sans le drapeau, un acces direct a /choix-classe est renvoye a l\'accueil',
+    (tester) async {
+      await monterApp(
+        tester,
+        auth: _FauxAuthRepository(
+          session: const SessionAuth(utilisateurId: 'u1'),
+        ),
+        catalogue: _catalogue,
+        profil: _FauxProfilRepository(
+          profil: Utilisateur(
+            id: 'u1',
+            classeId: 'c-6e',
+            serie: null,
+            creeLe: DateTime(2026, 8, 13),
+          ),
+        ),
+      );
+      expect(find.text('Ta progression'), findsOneWidget);
+
+      // Acces direct a /choix-classe SANS passer par le Profil (drapeau a faux) :
+      // la redirection renvoie l'ayant-droit a l'accueil.
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(FayeMathApp)),
+      );
+      container.read(routerProvider).go(cheminChoixClasse);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ta classe'), findsNothing);
+      expect(find.text('Ta progression'), findsOneWidget);
+    },
+  );
+
   testWidgets('accueil -> tap sur un chapitre -> ecran de detail (ecran 6)', (
     tester,
   ) async {

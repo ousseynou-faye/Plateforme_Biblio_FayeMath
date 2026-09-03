@@ -7,6 +7,7 @@ import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/choix_classe_provider.dart';
+import 'package:fayemath_academy/presentation/providers/modification_classe_provider.dart';
 import 'package:fayemath_academy/presentation/providers/onboarding_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 import 'package:fayemath_academy/presentation/providers/reinitialisation_provider.dart';
@@ -102,6 +103,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       // l'onglet d'arrivee), on ne le rejette pas d'un sous-ecran de cette zone
       // vers l'accueil — sinon tout changement d'onglet ou `push` rebondirait.
       if (cible == cheminTableauBord && _estZoneContenu(ou)) return null;
+      // Modification volontaire de la classe depuis le Profil : un ayant-droit
+      // (qui a deja une classe, d'ou cible = tableau de bord) peut RESTER sur
+      // l'ecran de choix tant que le drapeau est leve. Des que le choix est
+      // enregistre, le drapeau retombe et cette exception ne s'applique plus :
+      // la redirection ejecte vers l'accueil, comme le choix initial. Un eleve
+      // sans droit (deconnecte...) a une autre cible : l'exception ne le touche pas.
+      if (cible == cheminTableauBord &&
+          ou == cheminChoixClasse &&
+          ref.read(modificationClasseProvider)) {
+        return null;
+      }
       return cible;
     },
     routes: [
@@ -295,6 +307,13 @@ class _RafraichisseurNavigation extends ChangeNotifier {
       reinitialisationProvider,
       (_, _) => notifyListeners(),
     );
+    // Le drapeau « modification de classe depuis le Profil » change la cible
+    // autorisee : le lever/baisser doit re-evaluer la redirection (ouverture de
+    // l'ecran de choix depuis le Profil, puis ejection apres enregistrement).
+    _modification = ref.listen<bool>(
+      modificationClasseProvider,
+      (_, _) => notifyListeners(),
+    );
   }
 
   late final ProviderSubscription<EtatAuth> _auth;
@@ -302,6 +321,7 @@ class _RafraichisseurNavigation extends ChangeNotifier {
   late final ProviderSubscription<ChoixClasse> _choix;
   late final ProviderSubscription<EtatOnboarding> _onboarding;
   late final ProviderSubscription<EtatReinit> _reinit;
+  late final ProviderSubscription<bool> _modification;
 
   @override
   void dispose() {
@@ -310,6 +330,7 @@ class _RafraichisseurNavigation extends ChangeNotifier {
     _choix.close();
     _onboarding.close();
     _reinit.close();
+    _modification.close();
     super.dispose();
   }
 }
