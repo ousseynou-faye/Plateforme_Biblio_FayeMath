@@ -49,6 +49,37 @@ class AuthRepositorySupabase implements AuthRepository {
     await _proteger(() => _auth.signOut());
   }
 
+  @override
+  Future<void> demanderReinitialisation({required String email}) async {
+    // resetPasswordForEmail repond avec succes que le compte existe ou non
+    // (anti-enumeration) : l'appelant affiche une confirmation neutre. Sans
+    // redirectTo -> flux OTP (code a 6 chiffres via le gabarit d'e-mail).
+    await _proteger(() => _auth.resetPasswordForEmail(email));
+  }
+
+  @override
+  Future<void> verifierCodeReinitialisation({
+    required String email,
+    required String code,
+  }) async {
+    // En cas de succes, verifyOTP ouvre une session de recuperation et emet sur
+    // onAuthStateChange (evenement passwordRecovery) : cote presentation, le
+    // sous-etat « recuperation » retient la navigation jusqu'au nouveau mdp.
+    await _proteger(
+      () => _auth.verifyOTP(email: email, token: code, type: OtpType.recovery),
+    );
+  }
+
+  @override
+  Future<void> definirNouveauMotDePasse({required String motDePasse}) async {
+    // Exige la session de recuperation ouverte juste avant ; sans elle, gotrue
+    // leve AuthSessionMissingException -> traduite en echec inattendu (l'ordre
+    // des ecrans empeche ce cas en pratique).
+    await _proteger(
+      () => _auth.updateUser(UserAttributes(password: motDePasse)),
+    );
+  }
+
   /// Enveloppe un appel Supabase : toute erreur technique est traduite en
   /// echec metier. Aucun `catch` silencieux — on relaie toujours un echec typé.
   Future<T> _proteger<T>(Future<T> Function() action) async {
@@ -92,6 +123,15 @@ EchecAuthentification traduireEchecAuth(Object erreur) {
       case 'invalid_credentials':
       case 'invalid_grant':
         return const IdentifiantsInvalides();
+      // Reinitialisation de mot de passe (flux OTP, lot « Qualite B ») : code a
+      // 6 chiffres faux ou expire au moment du verifyOTP(recovery).
+      case 'otp_expired':
+      case 'otp_disabled':
+        return const CodeRecuperationInvalide();
+      // Limites d'envoi cote Supabase (SMTP par defaut bride, ou trop de requetes).
+      case 'over_email_send_rate_limit':
+      case 'over_request_rate_limit':
+        return const TropDeTentatives();
     }
     // Repli sur le message (messages serveur Supabase en anglais, non localises)
     // quand le code est absent.
@@ -103,6 +143,17 @@ EchecAuthentification traduireEchecAuth(Object erreur) {
     }
     if (message.contains('invalid login credentials')) {
       return const IdentifiantsInvalides();
+    }
+    // verifyOTP renvoie typiquement « Token has expired or is invalid » quand le
+    // code est mauvais ou perime, parfois sans code stable.
+    if (message.contains('token has expired or is invalid') ||
+        (message.contains('otp') &&
+            (message.contains('expired') || message.contains('invalid')))) {
+      return const CodeRecuperationInvalide();
+    }
+    if (message.contains('rate limit') ||
+        message.contains('too many requests')) {
+      return const TropDeTentatives();
     }
     // Diagnostic NON sensible : code + statut, jamais e-mail / mot de passe.
     return EchecAuthentificationInattendu(

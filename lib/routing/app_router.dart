@@ -7,7 +7,9 @@ import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/choix_classe_provider.dart';
+import 'package:fayemath_academy/presentation/providers/onboarding_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
+import 'package:fayemath_academy/presentation/providers/reinitialisation_provider.dart';
 import 'package:fayemath_academy/presentation/screens/authentification_screen.dart';
 import 'package:fayemath_academy/presentation/screens/choix_classe_screen.dart';
 import 'package:fayemath_academy/presentation/screens/demarrage_screen.dart';
@@ -16,12 +18,20 @@ import 'package:fayemath_academy/presentation/screens/lecteur_document_screen.da
 import 'package:fayemath_academy/presentation/screens/liste_chapitres_screen.dart';
 import 'package:fayemath_academy/presentation/screens/ma_progression_screen.dart';
 import 'package:fayemath_academy/presentation/screens/mes_telechargements_screen.dart';
+import 'package:fayemath_academy/presentation/screens/onboarding_screen.dart';
 import 'package:fayemath_academy/presentation/screens/profil_screen.dart';
 import 'package:fayemath_academy/presentation/screens/tableau_bord_screen.dart';
 import 'package:fayemath_academy/presentation/widgets/coquille_onglets.dart';
 
 /// Chemins internes de navigation.
 const cheminDemarrage = '/demarrage';
+
+/// L'onboarding (ecran 1) : premier ecran au TOUT premier lancement sur cet
+/// appareil, AVANT l'authentification. N'est atteint que par un eleve deconnecte
+/// qui n'a jamais vu la presentation (voir [_cibleDeconnecte]) — jamais un
+/// connecte ni un invite. Lot « Qualite et experience eleve », hors des 38 etapes.
+const cheminOnboarding = '/onboarding';
+
 const cheminConnexion = '/connexion';
 const cheminChoixClasse = '/choix-classe';
 
@@ -98,6 +108,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: cheminDemarrage,
         builder: (context, state) => const DemarrageScreen(),
+      ),
+      GoRoute(
+        path: cheminOnboarding,
+        builder: (context, state) => const OnboardingScreen(),
       ),
       GoRoute(
         path: cheminConnexion,
@@ -215,9 +229,17 @@ bool _estZoneContenu(String emplacement) =>
 /// scelles [EtatAuth] et [EtatProfil]) : un cas oublie serait une erreur de
 /// compilation, pas un bug de navigation silencieux.
 String _cibleNavigation(Ref ref) {
+  // Sous-flux « mot de passe oublie » : quand une session de RECUPERATION est
+  // ouverte (code verifie, nouveau mot de passe pas encore pose), on RETIENT
+  // l'eleve sur l'ecran d'auth malgre la session — sinon `verifyOTP`, qui ouvre
+  // une vraie session, ferait filer la navigation vers le contenu (lot B/C).
+  if (ref.read(reinitialisationProvider).recuperationEnCours) {
+    return cheminConnexion;
+  }
+
   final etatAuth = ref.read(etatAuthProvider);
   return switch (etatAuth) {
-    AuthDeconnecte() => cheminConnexion,
+    AuthDeconnecte() => _cibleDeconnecte(ref),
     AuthInvite() =>
       ref.read(choixClasseProvider).valide
           ? cheminTableauBord
@@ -231,6 +253,19 @@ String _cibleNavigation(Ref ref) {
     },
   };
 }
+
+/// Ou envoyer un eleve DECONNECTE. L'onboarding (ecran 1) passe AVANT
+/// l'authentification, mais une seule fois par appareil : on n'y renvoie que si
+/// le drapeau « deja vu » est absent. Tant qu'il n'est pas lu (lecture disque
+/// asynchrone), on patiente sur l'ecran de demarrage neutre — jamais un « flash »
+/// d'onboarding pour un eleve qui l'a deja passe. Un connecte ou un invite
+/// n'arrive jamais ici (autres branches de [_cibleNavigation]) : conforme au
+/// point 2 (onboarding = notion d'appareil, pas de compte).
+String _cibleDeconnecte(Ref ref) => switch (ref.read(etatOnboardingProvider)) {
+  OnboardingIndetermine() => cheminDemarrage,
+  OnboardingRequis() => cheminOnboarding,
+  OnboardingVu() => cheminConnexion,
+};
 
 /// Pont entre les providers d'etat (Riverpod) et le `refreshListenable` de
 /// go_router : chaque changement d'auth, de profil ou de choix de classe
@@ -246,17 +281,35 @@ class _RafraichisseurNavigation extends ChangeNotifier {
       choixClasseProvider,
       (_, _) => notifyListeners(),
     );
+    // Le drapeau d'onboarding se lit au demarrage (asynchrone) puis, quand
+    // l'eleve « Passe » ou « Commence », bascule a « vu » : chaque changement
+    // doit re-evaluer la redirection (deconnecte + non vu -> onboarding ->
+    // deconnecte + vu -> connexion).
+    _onboarding = ref.listen<EtatOnboarding>(
+      etatOnboardingProvider,
+      (_, _) => notifyListeners(),
+    );
+    // Le sous-flux de reinitialisation change la cible via `recuperationEnCours` :
+    // toute transition doit re-evaluer la redirection.
+    _reinit = ref.listen<EtatReinit>(
+      reinitialisationProvider,
+      (_, _) => notifyListeners(),
+    );
   }
 
   late final ProviderSubscription<EtatAuth> _auth;
   late final ProviderSubscription<EtatProfil> _profil;
   late final ProviderSubscription<ChoixClasse> _choix;
+  late final ProviderSubscription<EtatOnboarding> _onboarding;
+  late final ProviderSubscription<EtatReinit> _reinit;
 
   @override
   void dispose() {
     _auth.close();
     _profil.close();
     _choix.close();
+    _onboarding.close();
+    _reinit.close();
     super.dispose();
   }
 }

@@ -11,6 +11,8 @@ String messagePour(EchecAuthentification echec) => switch (echec) {
   CompteExistant() => 'Un compte existe deja avec cet e-mail.',
   EmailNonConfirme() => 'Confirme ton e-mail avant de te connecter.',
   PanneReseau() => 'Pas de connexion. Reessaie.',
+  CodeRecuperationInvalide() => 'Code incorrect ou expire.',
+  TropDeTentatives() => 'Trop de demandes. Patiente un moment.',
   EchecAuthentificationInattendu() => 'Une erreur est survenue. Reessaie.',
 };
 
@@ -21,6 +23,8 @@ void main() {
       expect(messagePour(const CompteExistant()), isNotEmpty);
       expect(messagePour(const EmailNonConfirme()), isNotEmpty);
       expect(messagePour(const PanneReseau()), isNotEmpty);
+      expect(messagePour(const CodeRecuperationInvalide()), isNotEmpty);
+      expect(messagePour(const TropDeTentatives()), isNotEmpty);
       expect(messagePour(const EchecAuthentificationInattendu()), isNotEmpty);
     });
 

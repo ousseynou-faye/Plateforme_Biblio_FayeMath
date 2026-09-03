@@ -23,6 +23,7 @@ import 'package:fayemath_academy/domain/repositories/auth_repository.dart';
 import 'package:fayemath_academy/domain/repositories/catalogue_repository.dart';
 import 'package:fayemath_academy/domain/repositories/chapitre_repository.dart';
 import 'package:fayemath_academy/domain/repositories/profil_repository.dart';
+import 'package:fayemath_academy/domain/repositories/preferences_onboarding_repository.dart';
 import 'package:fayemath_academy/domain/repositories/progression_repository.dart';
 import 'package:fayemath_academy/domain/repositories/ressource_repository.dart';
 import 'package:fayemath_academy/domain/repositories/telechargement_repository.dart';
@@ -31,13 +32,16 @@ import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
 import 'package:fayemath_academy/presentation/providers/etat_reseau_provider.dart';
+import 'package:fayemath_academy/presentation/providers/onboarding_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
+import 'package:fayemath_academy/presentation/providers/reinitialisation_provider.dart';
 import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
 import 'package:fayemath_academy/presentation/screens/detail_chapitre_screen.dart';
 import 'package:fayemath_academy/presentation/screens/lecteur_document_screen.dart';
 import 'package:fayemath_academy/presentation/screens/ma_progression_screen.dart';
+import 'package:fayemath_academy/presentation/screens/onboarding_screen.dart';
 import 'package:fayemath_academy/routing/app_router.dart';
 
 /// Faux repository d'auth : « connecte » si [session] est non nul.
@@ -62,6 +66,15 @@ class _FauxAuthRepository implements AuthRepository {
   }) async {}
   @override
   Future<void> seDeconnecter() async {}
+  @override
+  Future<void> demanderReinitialisation({required String email}) async {}
+  @override
+  Future<void> verifierCodeReinitialisation({
+    required String email,
+    required String code,
+  }) async {}
+  @override
+  Future<void> definirNouveauMotDePasse({required String motDePasse}) async {}
 }
 
 /// Faux catalogue en memoire.
@@ -178,6 +191,36 @@ class _FauxTelechargementRepository implements TelechargementRepository {
   Future<void> supprimer(String ressourceId) async {}
 }
 
+/// Faux memoire d'onboarding. Defaut « deja vu » : la grande majorite des tests
+/// n'exercent pas l'onboarding et doivent atterrir comme avant (auth / choix /
+/// accueil). Les tests dedies passent `onboardingVu: false`.
+class _FauxPreferencesOnboarding implements PreferencesOnboardingRepository {
+  _FauxPreferencesOnboarding({this.vu = true});
+
+  bool vu;
+
+  @override
+  Future<bool> onboardingVu() async => vu;
+  @override
+  Future<void> marquerOnboardingVu() async => vu = true;
+  @override
+  Future<void> reinitialiserOnboarding() async => vu = false;
+}
+
+/// Notifier de reinitialisation fige en « recuperation en cours » (session de
+/// recuperation ouverte, nouveau mot de passe pas encore pose) pour prouver la
+/// RETENTION du routeur : meme un eleve connecte reste sur l'ecran d'auth.
+class _ReinitEnRecuperation extends ReinitialisationNotifier {
+  @override
+  EtatReinit build() => const EtatReinit(
+    actif: true,
+    etape: EtapeReinit.verification,
+    codeVerifie: true,
+    recuperationEnCours: true,
+    email: 'awa@example.com',
+  );
+}
+
 const _maths = Matiere(id: 'm-maths', nom: 'Mathématiques');
 final _catalogue = _FauxCatalogueRepository(
   lesClasses: const [
@@ -193,10 +236,19 @@ Future<void> monterApp(
   ProfilRepository? profil,
   List<Chapitre> chapitres = const [],
   List<Ressource> ressources = const [],
+  bool onboardingVu = true,
+  bool reinitEnRecuperation = false,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        preferencesOnboardingRepositoryProvider.overrideWithValue(
+          _FauxPreferencesOnboarding(vu: onboardingVu),
+        ),
+        // Fige le sous-flux de reinitialisation en « recuperation en cours »
+        // (pour le test de retention du routeur).
+        if (reinitEnRecuperation)
+          reinitialisationProvider.overrideWith(_ReinitEnRecuperation.new),
         // Le vrai detecteur reseau depend du plugin natif connectivity_plus,
         // absent en test : flux vide -> le bandeau rend rien (SizedBox.shrink),
         // sans interferer avec les assertions de texte.
@@ -707,6 +759,143 @@ void main() {
 
       expect(find.byType(MaProgressionScreen), findsNothing);
       expect(find.text('Ta classe'), findsOneWidget);
+    },
+  );
+
+  // --- Onboarding (ecran 1, lot « Qualite et experience eleve ») -------------
+
+  testWidgets(
+    'premier lancement (deconnecte, jamais vu) : affiche l\'onboarding avant l\'auth',
+    (tester) async {
+      await monterApp(
+        tester,
+        auth: _FauxAuthRepository(),
+        onboardingVu: false,
+      );
+
+      expect(find.byType(OnboardingScreen), findsOneWidget);
+      // Le tag de la diapo marque (unique a l'onboarding ; « FayeMath Academy »
+      // apparait deux fois — barre haute + titre — donc non discriminant).
+      expect(find.text('La reussite se construit a domicile'), findsOneWidget);
+      // Pas encore l'ecran d'auth.
+      expect(
+        find.widgetWithText(FilledButton, 'Creer mon compte'),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('onboarding deja vu : va directement a l\'auth (pas d\'onboarding)', (
+    tester,
+  ) async {
+    await monterApp(tester, auth: _FauxAuthRepository(), onboardingVu: true);
+
+    expect(find.byType(OnboardingScreen), findsNothing);
+    expect(
+      find.widgetWithText(FilledButton, 'Creer mon compte'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('onboarding : « Passer » mene a l\'ecran d\'auth', (tester) async {
+    await monterApp(tester, auth: _FauxAuthRepository(), onboardingVu: false);
+    expect(find.byType(OnboardingScreen), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Passer'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(OnboardingScreen), findsNothing);
+    expect(
+      find.widgetWithText(FilledButton, 'Creer mon compte'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'onboarding : parcourir les 3 diapos puis « Commencer » mene a l\'auth',
+    (tester) async {
+      await monterApp(tester, auth: _FauxAuthRepository(), onboardingVu: false);
+      expect(find.byType(OnboardingScreen), findsOneWidget);
+
+      // Diapo 1 et 2 : le CTA est « Suivant ».
+      await tester.tap(find.widgetWithText(FilledButton, 'Suivant'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Suivant'));
+      await tester.pumpAndSettle();
+
+      // Diapo 3 : le CTA devient « Commencer ».
+      final commencer = find.widgetWithText(FilledButton, 'Commencer');
+      expect(commencer, findsOneWidget);
+      await tester.tap(commencer);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(OnboardingScreen), findsNothing);
+      expect(
+        find.widgetWithText(FilledButton, 'Creer mon compte'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  // NEGATIF : un eleve CONNECTE ne voit JAMAIS l'onboarding, meme si le drapeau
+  // « deja vu » est absent — l'onboarding est une notion d'appareil filtree par
+  // la seule branche « deconnecte » de la redirection (point 2/4).
+  testWidgets(
+    'connecte AVEC classe : onboarding non vu -> jamais l\'onboarding, arrive a l\'accueil',
+    (tester) async {
+      await monterApp(
+        tester,
+        auth: _FauxAuthRepository(
+          session: const SessionAuth(utilisateurId: 'u1'),
+        ),
+        catalogue: _catalogue,
+        profil: _FauxProfilRepository(
+          profil: Utilisateur(
+            id: 'u1',
+            classeId: 'c-6e',
+            serie: null,
+            creeLe: DateTime(2026, 8, 13),
+          ),
+        ),
+        onboardingVu: false,
+      );
+
+      expect(find.byType(OnboardingScreen), findsNothing);
+      expect(find.text('Ta progression'), findsOneWidget);
+    },
+  );
+
+  // --- Reinitialisation du mot de passe (lot « Qualite B ») ------------------
+
+  // Retention du routeur : verifyOTP ouvre une VRAIE session (ici l'eleve est
+  // connecte AVEC classe, cible normale = contenu), mais tant que la
+  // recuperation est en cours, on RESTE sur l'ecran d'auth pour poser le nouveau
+  // mot de passe — sans quoi la navigation filerait vers le contenu (lot C).
+  testWidgets(
+    'reinitialisation en cours : session ouverte mais retenu sur l\'ecran d\'auth',
+    (tester) async {
+      await monterApp(
+        tester,
+        auth: _FauxAuthRepository(
+          session: const SessionAuth(utilisateurId: 'u1'),
+        ),
+        catalogue: _catalogue,
+        profil: _FauxProfilRepository(
+          profil: Utilisateur(
+            id: 'u1',
+            classeId: 'c-6e',
+            serie: null,
+            creeLe: DateTime(2026, 8, 13),
+          ),
+        ),
+        reinitEnRecuperation: true,
+      );
+
+      // Ni le contenu ni la coquille : on est retenu sur l'ecran d'auth.
+      expect(find.text('Ta progression'), findsNothing);
+      expect(find.byType(NavigationBar), findsNothing);
+      // Le sous-flux de reinitialisation est bien affiche.
+      expect(find.text('Mot de passe oublie'), findsOneWidget);
     },
   );
 }

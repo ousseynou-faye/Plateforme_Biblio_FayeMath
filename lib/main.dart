@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fayemath_academy/app.dart';
 import 'package:fayemath_academy/core/env/env.dart';
 import 'package:fayemath_academy/data/local/base_locale.dart';
+import 'package:fayemath_academy/data/local/stockage_onboarding.dart';
 import 'package:fayemath_academy/data/local/stockage_session_securise.dart';
 import 'package:fayemath_academy/data/remote/telechargeur_fichier.dart';
 import 'package:fayemath_academy/data/repositories/auth_repository.dart';
@@ -20,6 +21,7 @@ import 'package:fayemath_academy/data/repositories/telechargement_repository.dar
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
+import 'package:fayemath_academy/presentation/providers/onboarding_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
@@ -83,6 +85,12 @@ Future<void> main() async {
         // est presente, donc Supabase.instance est pret.
         authRepositoryProvider.overrideWith(
           (ref) => AuthRepositorySupabase(client.auth),
+        ),
+        // Memoire de l'onboarding (lot « Qualite et experience eleve ») : un
+        // simple drapeau « deja vu » dans le coffre chiffre du telephone (aucune
+        // dependance ajoutee). Purement local, aucun cote serveur.
+        preferencesOnboardingRepositoryProvider.overrideWith(
+          (ref) => const StockageOnboarding(),
         ),
         catalogueRepositoryProvider.overrideWith(
           (ref) => CatalogueRepositoryOfflineFirst(baseLocale, client),

@@ -22,6 +22,16 @@ class _FauxGoTrue implements GoTrueClient {
   @override
   dynamic noSuchMethod(Invocation invocation) {
     appels.add(invocation.memberName);
+    // `updateUser` renvoie un Future<UserResponse> : le type doit correspondre,
+    // sinon le cast implicite du retour de noSuchMethod echoue. Les autres
+    // methodes appelees renvoient Future<AuthResponse> ou Future<void>
+    // (Future<AuthResponse> en est un sous-type -> accepte pour signOut /
+    // resetPasswordForEmail).
+    if (invocation.memberName == #updateUser) {
+      return erreurAJeter != null
+          ? Future<UserResponse>.error(erreurAJeter!)
+          : Future<UserResponse>.value(UserResponse.fromJson({'id': 'u1'}));
+    }
     if (erreurAJeter != null) {
       return Future<AuthResponse>.error(erreurAJeter!);
     }
@@ -102,6 +112,40 @@ void main() {
       const dejaTraduit = PanneReseau();
       expect(traduireEchecAuth(dejaTraduit), same(dejaTraduit));
     });
+
+    // --- Reinitialisation de mot de passe (lot « Qualite B », flux OTP) -------
+
+    test('code otp_expired -> CodeRecuperationInvalide', () {
+      final echec = traduireEchecAuth(
+        const AuthApiException(
+          'Token has expired or is invalid',
+          statusCode: '403',
+          code: 'otp_expired',
+        ),
+      );
+      expect(echec, isA<CodeRecuperationInvalide>());
+    });
+
+    test('repli message « Token has expired or is invalid » -> '
+        'CodeRecuperationInvalide', () {
+      expect(
+        traduireEchecAuth(
+          const AuthApiException('Token has expired or is invalid'),
+        ),
+        isA<CodeRecuperationInvalide>(),
+      );
+    });
+
+    test('code over_email_send_rate_limit -> TropDeTentatives', () {
+      final echec = traduireEchecAuth(
+        const AuthApiException(
+          'Email rate limit exceeded',
+          statusCode: '429',
+          code: 'over_email_send_rate_limit',
+        ),
+      );
+      expect(echec, isA<TropDeTentatives>());
+    });
   });
 
   group('AuthRepositorySupabase (avec faux client)', () {
@@ -146,6 +190,55 @@ void main() {
       await repo.seDeconnecter();
 
       expect(faux.appels, contains(#signOut));
+    });
+
+    test('demanderReinitialisation delegue a resetPasswordForEmail', () async {
+      final faux = _FauxGoTrue();
+      final repo = AuthRepositorySupabase(faux);
+
+      await repo.demanderReinitialisation(email: 'awa@example.com');
+
+      expect(faux.appels, contains(#resetPasswordForEmail));
+    });
+
+    test('verifierCodeReinitialisation delegue a verifyOTP', () async {
+      final faux = _FauxGoTrue();
+      final repo = AuthRepositorySupabase(faux);
+
+      await repo.verifierCodeReinitialisation(
+        email: 'awa@example.com',
+        code: '123456',
+      );
+
+      expect(faux.appels, contains(#verifyOTP));
+    });
+
+    test('verifierCodeReinitialisation traduit un code expire en echec metier', () async {
+      final faux = _FauxGoTrue(
+        erreurAJeter: const AuthApiException(
+          'Token has expired or is invalid',
+          statusCode: '403',
+          code: 'otp_expired',
+        ),
+      );
+      final repo = AuthRepositorySupabase(faux);
+
+      await expectLater(
+        repo.verifierCodeReinitialisation(
+          email: 'awa@example.com',
+          code: '000000',
+        ),
+        throwsA(isA<CodeRecuperationInvalide>()),
+      );
+    });
+
+    test('definirNouveauMotDePasse delegue a updateUser', () async {
+      final faux = _FauxGoTrue();
+      final repo = AuthRepositorySupabase(faux);
+
+      await repo.definirNouveauMotDePasse(motDePasse: 'nouveaumdp1');
+
+      expect(faux.appels, contains(#updateUser));
     });
   });
 }

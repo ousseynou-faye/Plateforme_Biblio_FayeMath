@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fayemath_academy/core/errors/echecs_authentification.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/formulaire_auth_provider.dart';
+import 'package:fayemath_academy/presentation/providers/reinitialisation_provider.dart';
 import 'package:fayemath_academy/presentation/widgets/bouton_primaire_widget.dart';
 
 /// L'ecran unique d'authentification (maquette V2.1, ecran 2). Il bascule sur
@@ -28,10 +29,18 @@ class _AuthentificationScreenState
   final _motDePasse = TextEditingController();
   bool _cacherMotDePasse = true;
 
+  // Sous-flux « mot de passe oublie » (lot « Qualite B ») : cle et champs dedies.
+  final _cleReset = GlobalKey<FormState>();
+  final _code = TextEditingController();
+  final _nouveauMotDePasse = TextEditingController();
+  bool _cacherNouveauMotDePasse = true;
+
   @override
   void dispose() {
     _email.dispose();
     _motDePasse.dispose();
+    _code.dispose();
+    _nouveauMotDePasse.dispose();
     super.dispose();
   }
 
@@ -74,6 +83,22 @@ class _AuthentificationScreenState
   @override
   Widget build(BuildContext context) {
     final etat = ref.watch(formulaireAuthProvider);
+    final reinit = ref.watch(reinitialisationProvider);
+
+    // Reinitialisation reussie : confirmation ponctuelle, puis retour au
+    // formulaire de connexion (le sous-flux est deja repasse inactif).
+    ref.listen(reinitialisationProvider, (precedent, courant) {
+      if (courant.succes && !(precedent?.succes ?? false)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Mot de passe modifie. Connecte-toi avec ton nouveau mot de passe.',
+            ),
+          ),
+        );
+        ref.read(reinitialisationProvider.notifier).accuserSucces();
+      }
+    });
 
     return Scaffold(
       body: SafeArea(
@@ -82,7 +107,9 @@ class _AuthentificationScreenState
             padding: const EdgeInsets.fromLTRB(18, 24, 18, 24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 440),
-              child: etat.statut is InscriptionAConfirmer
+              child: reinit.actif
+                  ? _reinitialisation(context, reinit)
+                  : etat.statut is InscriptionAConfirmer
                   ? _PanneauConfirmation(email: _email.text.trim())
                   : _formulaire(context, etat),
             ),
@@ -209,13 +236,182 @@ class _AuthentificationScreenState
   }
 
   void _motDePasseOublie(BuildContext context) {
-    // Ecart de perimetre assume (etape 13) : la reinitialisation par e-mail
-    // exige son propre flux (envoi + lien profond + ecran de nouveau mot de
-    // passe), hors de cette etape. Le lien reste present pour la fidelite a la
-    // maquette ; on l'indique sans faire croire a une action.
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('La reinitialisation du mot de passe arrivera bientot.'),
+    // Lot « Qualite B » : ouvre le VRAI sous-flux de reinitialisation (code OTP a
+    // 6 chiffres), en remplacement du placeholder d'origine. On pre-remplit avec
+    // l'e-mail deja saisi cote connexion.
+    FocusScope.of(context).unfocus();
+    ref.read(reinitialisationProvider.notifier).ouvrir(_email.text);
+  }
+
+  void _demanderCode() {
+    FocusScope.of(context).unfocus();
+    if (_cleReset.currentState?.validate() ?? false) {
+      ref.read(reinitialisationProvider.notifier).demander(_email.text.trim());
+    }
+  }
+
+  void _soumettreCode() {
+    FocusScope.of(context).unfocus();
+    if (_cleReset.currentState?.validate() ?? false) {
+      ref.read(reinitialisationProvider.notifier).soumettreCode(_code.text);
+    }
+  }
+
+  void _definirMotDePasse() {
+    FocusScope.of(context).unfocus();
+    if (_cleReset.currentState?.validate() ?? false) {
+      ref
+          .read(reinitialisationProvider.notifier)
+          .definirMotDePasse(_nouveauMotDePasse.text);
+    }
+  }
+
+  String? _validerCode(String? valeur) {
+    final v = (valeur ?? '').trim();
+    if (v.isEmpty) return 'Entre le code recu par e-mail.';
+    if (!RegExp(r'^\d{6}$').hasMatch(v)) return 'Le code fait 6 chiffres.';
+    return null;
+  }
+
+  /// Le sous-flux « mot de passe oublie » : demande (e-mail -> code), puis
+  /// verification (code -> nouveau mot de passe). Meme composants accessibles et
+  /// meme regle de mot de passe qu'a l'inscription (8 caracteres, un chiffre).
+  Widget _reinitialisation(BuildContext context, EtatReinit etat) {
+    final theme = Theme.of(context);
+    final enCours = etat.statut is ReinitEnCours;
+
+    return Form(
+      key: _cleReset,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Icon(
+            Icons.lock_reset_outlined,
+            size: 40,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Mot de passe oublie',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleLarge,
+          ),
+          const SizedBox(height: 14),
+          if (etat.statut is ReinitEchouee) ...[
+            _Encadre(
+              type: _TypeEncadre.alerte,
+              titre: 'Action impossible',
+              message: _messagePourEchec((etat.statut as ReinitEchouee).echec),
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (etat.etape == EtapeReinit.demande) ...[
+            Text(
+              'Entre ton e-mail : si un compte existe, tu recevras un code a 6 '
+              'chiffres.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _email,
+              enabled: !enCours,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
+              decoration: const InputDecoration(
+                labelText: 'E-mail',
+                hintText: 'awa@example.com',
+                border: OutlineInputBorder(),
+              ),
+              validator: _validerEmail,
+            ),
+            const SizedBox(height: 14),
+            if (enCours) ...[
+              const LinearProgressIndicator(),
+              const SizedBox(height: 12),
+            ],
+            BoutonPrimaireWidget(
+              libelle: 'Envoyer le code',
+              onPressed: enCours ? null : _demanderCode,
+            ),
+          ] else ...[
+            _Encadre(
+              type: _TypeEncadre.info,
+              titre: 'Verifie ta boite mail',
+              message:
+                  'Si un compte existe pour ${etat.email}, un code a 6 chiffres '
+                  'vient d\'etre envoye. Saisis-le ci-dessous.',
+            ),
+            const SizedBox(height: 14),
+            if (!etat.codeVerifie) ...[
+              TextFormField(
+                controller: _code,
+                enabled: !enCours,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: const InputDecoration(
+                  labelText: 'Code a 6 chiffres',
+                  border: OutlineInputBorder(),
+                  counterText: '',
+                ),
+                validator: _validerCode,
+              ),
+              const SizedBox(height: 14),
+              if (enCours) ...[
+                const LinearProgressIndicator(),
+                const SizedBox(height: 12),
+              ],
+              BoutonPrimaireWidget(
+                libelle: 'Valider le code',
+                onPressed: enCours ? null : _soumettreCode,
+              ),
+            ] else ...[
+              TextFormField(
+                controller: _nouveauMotDePasse,
+                enabled: !enCours,
+                obscureText: _cacherNouveauMotDePasse,
+                autofillHints: const [AutofillHints.newPassword],
+                decoration: InputDecoration(
+                  labelText: 'Nouveau mot de passe',
+                  helperText: '8 caracteres minimum, dont un chiffre.',
+                  helperMaxLines: 2,
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    onPressed: () => setState(
+                      () => _cacherNouveauMotDePasse = !_cacherNouveauMotDePasse,
+                    ),
+                    icon: Icon(
+                      _cacherNouveauMotDePasse
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                    ),
+                    tooltip: _cacherNouveauMotDePasse
+                        ? 'Afficher le mot de passe'
+                        : 'Masquer le mot de passe',
+                  ),
+                ),
+                validator: (valeur) =>
+                    _validerMotDePasse(valeur, ModeAuth.inscription),
+              ),
+              const SizedBox(height: 14),
+              if (enCours) ...[
+                const LinearProgressIndicator(),
+                const SizedBox(height: 12),
+              ],
+              BoutonPrimaireWidget(
+                libelle: 'Definir le mot de passe',
+                onPressed: enCours ? null : _definirMotDePasse,
+              ),
+            ],
+          ],
+          const SizedBox(height: 8),
+          TextButton(
+            style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+            onPressed: enCours
+                ? null
+                : () => ref.read(reinitialisationProvider.notifier).annuler(),
+            child: const Text('Annuler'),
+          ),
+        ],
       ),
     );
   }
@@ -230,6 +426,10 @@ String _messagePourEchec(EchecAuthentification echec) => switch (echec) {
   EmailNonConfirme() =>
     'Confirme d\'abord ton e-mail (clique le lien recu), puis connecte-toi.',
   PanneReseau() => 'Pas de connexion. Verifie ton reseau et reessaie.',
+  CodeRecuperationInvalide() =>
+    'Code incorrect ou expire. Verifie-le, ou demande un nouveau code.',
+  TropDeTentatives() =>
+    'Trop de demandes. Patiente quelques minutes avant de reessayer.',
   EchecAuthentificationInattendu() => 'Une erreur est survenue. Reessaie.',
 };
 

@@ -27,6 +27,15 @@ class _FauxAuthRepository implements AuthRepository {
   }) async {}
   @override
   Future<void> seDeconnecter() async {}
+  @override
+  Future<void> demanderReinitialisation({required String email}) async {}
+  @override
+  Future<void> verifierCodeReinitialisation({
+    required String email,
+    required String code,
+  }) async {}
+  @override
+  Future<void> definirNouveauMotDePasse({required String motDePasse}) async {}
 }
 
 Future<void> monterEcran(WidgetTester tester) async {
@@ -102,5 +111,89 @@ void main() {
     // desormais de creer un compte.
     expect(find.widgetWithText(FilledButton, 'Se connecter'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Creer un compte'), findsOneWidget);
+  });
+
+  // --- Sous-flux « mot de passe oublie » (lot « Qualite B ») -----------------
+
+  /// Passe en mode connexion puis ouvre le sous-flux de reinitialisation.
+  Future<void> ouvrirReinitialisation(WidgetTester tester) async {
+    await tester.tap(find.widgetWithText(TextButton, 'Se connecter'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Mot de passe oublie ?'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('« Mot de passe oublie ? » ouvre l\'etape demande', (
+    tester,
+  ) async {
+    await monterEcran(tester);
+    await ouvrirReinitialisation(tester);
+
+    expect(find.text('Mot de passe oublie'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Envoyer le code'), findsOneWidget);
+  });
+
+  testWidgets('un code non numerique est refuse par la validation cliente', (
+    tester,
+  ) async {
+    await monterEcran(tester);
+    await ouvrirReinitialisation(tester);
+
+    await tester.enterText(find.byType(TextFormField), 'awa@example.com');
+    await tester.tap(find.widgetWithText(FilledButton, 'Envoyer le code'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField), 'abc');
+    await tester.tap(find.widgetWithText(FilledButton, 'Valider le code'));
+    await tester.pump();
+
+    expect(find.text('Le code fait 6 chiffres.'), findsOneWidget);
+  });
+
+  testWidgets(
+    'parcours complet : demande -> code -> nouveau mdp -> succes -> connexion',
+    (tester) async {
+      await monterEcran(tester);
+      await ouvrirReinitialisation(tester);
+
+      // Etape demande : e-mail -> envoyer le code.
+      await tester.enterText(find.byType(TextFormField), 'awa@example.com');
+      await tester.tap(find.widgetWithText(FilledButton, 'Envoyer le code'));
+      await tester.pumpAndSettle();
+      expect(find.text('Verifie ta boite mail'), findsOneWidget);
+
+      // Etape verification : saisir le code -> devoile le nouveau mot de passe.
+      await tester.enterText(find.byType(TextFormField), '123456');
+      await tester.tap(find.widgetWithText(FilledButton, 'Valider le code'));
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(FilledButton, 'Definir le mot de passe'),
+        findsOneWidget,
+      );
+
+      // Nouveau mot de passe (regle 8 caracteres + un chiffre) -> succes.
+      await tester.enterText(find.byType(TextFormField), 'nouveaumdp1');
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Definir le mot de passe'),
+      );
+      await tester.pumpAndSettle();
+
+      // Confirmation + retour au formulaire de connexion.
+      expect(find.textContaining('Mot de passe modifie'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Se connecter'), findsOneWidget);
+    },
+  );
+
+  testWidgets('« Annuler » revient au formulaire d\'authentification', (
+    tester,
+  ) async {
+    await monterEcran(tester);
+    await ouvrirReinitialisation(tester);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Annuler'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mot de passe oublie'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Se connecter'), findsOneWidget);
   });
 }

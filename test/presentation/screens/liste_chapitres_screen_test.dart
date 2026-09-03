@@ -55,6 +55,16 @@ class _FauxAuthRepository implements AuthRepository {
   Future<void> seDeconnecter() async {
     deconnexionAppelee = true;
   }
+
+  @override
+  Future<void> demanderReinitialisation({required String email}) async {}
+  @override
+  Future<void> verifierCodeReinitialisation({
+    required String email,
+    required String code,
+  }) async {}
+  @override
+  Future<void> definirNouveauMotDePasse({required String motDePasse}) async {}
 }
 
 class _FauxCatalogueRepository implements CatalogueRepository {

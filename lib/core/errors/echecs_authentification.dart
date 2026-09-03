@@ -52,6 +52,21 @@ class PanneReseau extends EchecAuthentification {
   const PanneReseau([super.diagnostic]);
 }
 
+/// Code de recuperation (recu par e-mail) faux ou expire, saisi a l'ecran
+/// « mot de passe oublie » (flux OTP, lot « Qualite B »). Distinct de
+/// [IdentifiantsInvalides] (echec de CONNEXION) : ici l'eleve a un compte, il se
+/// trompe (ou tarde) sur le code a 6 chiffres.
+class CodeRecuperationInvalide extends EchecAuthentification {
+  const CodeRecuperationInvalide([super.diagnostic]);
+}
+
+/// Trop de demandes rapprochees (limite d'envoi d'e-mails / de requetes cote
+/// Supabase). Frequent avec le SMTP par defaut (debit bride) : on invite l'eleve
+/// a patienter plutot que d'afficher un message generique d'erreur.
+class TropDeTentatives extends EchecAuthentification {
+  const TropDeTentatives([super.diagnostic]);
+}
+
 /// Tout autre echec non prevu individuellement. Fourre-tout TRACABLE (jamais
 /// silencieux) : on journalise son [diagnostic] non sensible et on affiche a
 /// l'eleve un message generique.
