@@ -10,6 +10,7 @@ import 'package:fayemath_academy/presentation/providers/bibliotheque_provider.da
 import 'package:fayemath_academy/presentation/providers/choix_classe_provider.dart';
 import 'package:fayemath_academy/presentation/providers/modification_classe_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
+import 'package:fayemath_academy/presentation/providers/reglages_provider.dart';
 
 /// Onglet « Profil » de la barre du bas (maquette V2.1, ecran 10 « Profil et
 /// abonnement »), lot Qualite C. Remplace le placeholder de l'etape 20.
@@ -51,17 +52,15 @@ class ProfilScreen extends ConsumerWidget {
                   onTap: () => _ouvrirModificationClasse(context, ref),
                 ),
                 _Reglage(
-                  icone: Icons.settings_outlined,
-                  libelle: 'Parametres et notifications',
-                  onTap: () => _bientot(context, 'Les parametres'),
-                ),
-                _Reglage(
                   icone: Icons.help_outline,
                   libelle: 'Aide et contact',
                   onTap: () => _bientot(context, "L'aide et le contact"),
                 ),
               ],
             ),
+            const SizedBox(height: 14),
+            const _TitreSection('Parametres'),
+            const _CarteParametres(),
             const SizedBox(height: 14),
             const _TitreSection('Aller plus loin'),
             _CartePremium(
@@ -296,6 +295,61 @@ class _SectionCompte extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// La carte « Parametres » : pour l'instant l'unique reglage « Wi-Fi uniquement »
+/// (lot « Qualite D »). Remplace le placeholder « Parametres et notifications » de
+/// la maquette : on construit le vrai reglage plutot que d'annoncer des
+/// notifications qui n'existent pas.
+class _CarteParametres extends StatelessWidget {
+  const _CarteParametres();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    // Material (et non un Container colore) : le SwitchListTile peint son encre
+    // sur le Material ancetre le plus proche ; un DecoratedBox colore par-dessus
+    // la masquerait (assertion Flutter).
+    return Material(
+      color: scheme.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      child: const _BasculeWifi(),
+    );
+  }
+}
+
+/// La bascule « Telecharger uniquement en Wi-Fi ». Lit et ecrit le reglage via
+/// [telechargerEnWifiSeulementProvider] ; le changement prend effet tout de suite
+/// (le prochain telechargement le consulte). Cible >= 48 px (SwitchListTile).
+class _BasculeWifi extends ConsumerWidget {
+  const _BasculeWifi();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final wifiSeulement = ref.watch(telechargerEnWifiSeulementProvider);
+    return SwitchListTile(
+      value: wifiSeulement,
+      onChanged: (valeur) => ref
+          .read(telechargerEnWifiSeulementProvider.notifier)
+          .definir(valeur: valeur),
+      secondary: Icon(Icons.wifi, color: theme.colorScheme.onSurfaceVariant),
+      title: const Text('Telecharger uniquement en Wi-Fi'),
+      subtitle: Text(
+        'Protege ton forfait : les documents ne se telechargent qu\'en Wi-Fi. '
+        'En donnees mobiles, le telechargement est bloque avec un message.',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+      isThreeLine: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 4),
     );
   }
 }

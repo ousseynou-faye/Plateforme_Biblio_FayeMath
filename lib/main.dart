@@ -9,6 +9,7 @@ import 'package:fayemath_academy/app.dart';
 import 'package:fayemath_academy/core/env/env.dart';
 import 'package:fayemath_academy/data/local/base_locale.dart';
 import 'package:fayemath_academy/data/local/stockage_onboarding.dart';
+import 'package:fayemath_academy/data/local/stockage_reglages.dart';
 import 'package:fayemath_academy/data/local/stockage_session_securise.dart';
 import 'package:fayemath_academy/data/remote/telechargeur_fichier.dart';
 import 'package:fayemath_academy/data/repositories/auth_repository.dart';
@@ -24,6 +25,7 @@ import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
 import 'package:fayemath_academy/presentation/providers/onboarding_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
+import 'package:fayemath_academy/presentation/providers/reglages_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
 
@@ -91,6 +93,12 @@ Future<void> main() async {
         // dependance ajoutee). Purement local, aucun cote serveur.
         preferencesOnboardingRepositoryProvider.overrideWith(
           (ref) => const StockageOnboarding(),
+        ),
+        // Reglages non sensibles de l'appareil (lot « Qualite D ») : aujourd'hui
+        // « telecharger uniquement en Wi-Fi ». Meme coffre chiffre, aucune
+        // dependance ajoutee ; disponible aussi pour un invite (lie a l'appareil).
+        preferencesReglagesRepositoryProvider.overrideWith(
+          (ref) => const StockageReglages(),
         ),
         catalogueRepositoryProvider.overrideWith(
           (ref) => CatalogueRepositoryOfflineFirst(baseLocale, client),

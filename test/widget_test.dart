@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:fayemath_academy/core/network/etat_reseau.dart';
+import 'package:fayemath_academy/core/network/type_interface_reseau.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
 import 'package:fayemath_academy/domain/entities/cycle.dart';
@@ -24,6 +25,7 @@ import 'package:fayemath_academy/domain/repositories/catalogue_repository.dart';
 import 'package:fayemath_academy/domain/repositories/chapitre_repository.dart';
 import 'package:fayemath_academy/domain/repositories/profil_repository.dart';
 import 'package:fayemath_academy/domain/repositories/preferences_onboarding_repository.dart';
+import 'package:fayemath_academy/domain/repositories/preferences_reglages_repository.dart';
 import 'package:fayemath_academy/domain/repositories/progression_repository.dart';
 import 'package:fayemath_academy/domain/repositories/ressource_repository.dart';
 import 'package:fayemath_academy/domain/repositories/telechargement_repository.dart';
@@ -36,6 +38,7 @@ import 'package:fayemath_academy/presentation/providers/onboarding_provider.dart
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 import 'package:fayemath_academy/presentation/providers/reinitialisation_provider.dart';
 import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
+import 'package:fayemath_academy/presentation/providers/reglages_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
 import 'package:fayemath_academy/presentation/screens/detail_chapitre_screen.dart';
@@ -207,6 +210,17 @@ class _FauxPreferencesOnboarding implements PreferencesOnboardingRepository {
   Future<void> reinitialiserOnboarding() async => vu = false;
 }
 
+/// Faux reglages : la bascule « Wi-Fi uniquement » du Profil lit ce contrat.
+class _FauxPreferencesReglages implements PreferencesReglagesRepository {
+  bool wifiSeulement = true;
+
+  @override
+  Future<bool> telechargerEnWifiSeulement() async => wifiSeulement;
+  @override
+  Future<void> definirTelechargerEnWifiSeulement({required bool valeur}) async =>
+      wifiSeulement = valeur;
+}
+
 /// Notifier de reinitialisation fige en « recuperation en cours » (session de
 /// recuperation ouverte, nouveau mot de passe pas encore pose) pour prouver la
 /// RETENTION du routeur : meme un eleve connecte reste sur l'ecran d'auth.
@@ -244,6 +258,15 @@ Future<void> monterApp(
       overrides: [
         preferencesOnboardingRepositoryProvider.overrideWithValue(
           _FauxPreferencesOnboarding(vu: onboardingVu),
+        ),
+        // Reglages (lot Qualite D) : la bascule « Wi-Fi uniquement » du Profil lit
+        // ce contrat ; l'interface reseau est figee (aucun widget-test ne
+        // telecharge, mais on evite tout acces au plugin natif).
+        preferencesReglagesRepositoryProvider.overrideWithValue(
+          _FauxPreferencesReglages(),
+        ),
+        interfaceReseauProvider.overrideWithValue(
+          () async => TypeInterfaceReseau.wifi,
         ),
         // Fige le sous-flux de reinitialisation en « recuperation en cours »
         // (pour le test de retention du routeur).

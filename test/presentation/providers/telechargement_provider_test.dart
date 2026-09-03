@@ -4,10 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fayemath_academy/core/errors/echec_telechargement.dart';
+import 'package:fayemath_academy/core/network/type_interface_reseau.dart';
 import 'package:fayemath_academy/domain/entities/etat_telechargement.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/domain/entities/type_ressource.dart';
+import 'package:fayemath_academy/domain/repositories/preferences_reglages_repository.dart';
 import 'package:fayemath_academy/domain/repositories/telechargement_repository.dart';
+import 'package:fayemath_academy/presentation/providers/etat_reseau_provider.dart';
+import 'package:fayemath_academy/presentation/providers/reglages_provider.dart';
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
 
 /// Faux moteur : notre propre contrat, trivial a imiter. Un `StreamController`
@@ -31,6 +35,21 @@ class _FauxTelechargementRepository implements TelechargementRepository {
   Future<void> supprimer(String ressourceId) async {}
 }
 
+/// Faux reglages en memoire (le verrou « Wi-Fi uniquement » lit ce contrat).
+class _FauxReglages implements PreferencesReglagesRepository {
+  _FauxReglages(this.wifiSeulement);
+
+  bool wifiSeulement;
+
+  @override
+  Future<bool> telechargerEnWifiSeulement() async => wifiSeulement;
+
+  @override
+  Future<void> definirTelechargerEnWifiSeulement({required bool valeur}) async {
+    wifiSeulement = valeur;
+  }
+}
+
 /// Une ressource minimale pour les tests (un cours de chapitre).
 Ressource _ressource(String id) => Ressource(
   id: id,
@@ -50,10 +69,20 @@ Ressource _ressource(String id) => Ressource(
 Future<void> laisserDelivrer() => Future<void>.delayed(Duration.zero);
 
 void main() {
-  ProviderContainer creerContainer(TelechargementRepository repository) {
+  ProviderContainer creerContainer(
+    TelechargementRepository repository, {
+    bool wifiSeulement = false,
+    TypeInterfaceReseau interface = TypeInterfaceReseau.wifi,
+  }) {
     final container = ProviderContainer(
       overrides: [
         telechargementRepositoryProvider.overrideWithValue(repository),
+        // Verrou « Wi-Fi uniquement » (lot « Qualite D ») : par defaut on ne
+        // bloque pas (interface Wi-Fi), les tests existants restent inchanges.
+        preferencesReglagesRepositoryProvider.overrideWithValue(
+          _FauxReglages(wifiSeulement),
+        ),
+        interfaceReseauProvider.overrideWithValue(() async => interface),
       ],
     );
     addTearDown(container.dispose);
@@ -98,7 +127,9 @@ void main() {
       final faux = _FauxTelechargementRepository();
       final container = creerContainer(faux);
 
-      container
+      // demarrer est asynchrone (il lit d'abord le type d'interface pour le verrou
+      // Wi-Fi) : on l'attend avant de verifier l'etat « en cours ».
+      await container
           .read(telechargementProvider.notifier)
           .demarrer(_ressource('r1'));
       expect(
@@ -127,7 +158,7 @@ void main() {
       final faux = _FauxTelechargementRepository();
       final container = creerContainer(faux);
 
-      container
+      await container
           .read(telechargementProvider.notifier)
           .demarrer(_ressource('r1'));
       faux.controleur.addError(
@@ -139,6 +170,27 @@ void main() {
       expect(vue.etat, EtatTelechargement.echec);
       expect(vue.cause, CauseTelechargement.reseau);
     });
+
+    test('reglage Wi-Fi actif + donnees mobiles : bloque, aucun transfert', () async {
+      final faux = _FauxTelechargementRepository();
+      final container = creerContainer(
+        faux,
+        wifiSeulement: true,
+        interface: TypeInterfaceReseau.donneesMobiles,
+      );
+
+      await container
+          .read(telechargementProvider.notifier)
+          .demarrer(_ressource('r1'));
+
+      final vue = container.read(vueTelechargementProvider('r1'));
+      // Bloque : pas d'echec de transfert, le document reste telechargeable, mais
+      // le drapeau dit a l'ecran d'expliquer le blocage.
+      expect(vue.bloqueDonneesMobiles, isTrue);
+      expect(vue.etat, EtatTelechargement.telechargeable);
+      // Le moteur n'a pas ete sollicite (aucun abonnement au flux).
+      expect(faux.controleur.hasListener, isFalse);
+    });
   });
 
   group('annuler', () {
@@ -147,7 +199,7 @@ void main() {
       final container = creerContainer(faux);
       final notifier = container.read(telechargementProvider.notifier);
 
-      notifier.demarrer(_ressource('r1'));
+      await notifier.demarrer(_ressource('r1'));
       expect(
         container.read(vueTelechargementProvider('r1')).etat,
         EtatTelechargement.enCours,

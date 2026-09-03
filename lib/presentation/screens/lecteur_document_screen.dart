@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -214,9 +216,11 @@ class _LecteurDocumentScreenState extends ConsumerState<LecteurDocumentScreen> {
         tailleTexte: TailleFichier.enTexte(widget.ressource.tailleOctets),
         premium: widget.ressource.premium,
         estConnecte: estConnecte,
-        onTelecharger: () => ref
-            .read(telechargementProvider.notifier)
-            .demarrer(widget.ressource),
+        onTelecharger: () => unawaited(
+          ref
+              .read(telechargementProvider.notifier)
+              .demarrer(widget.ressource),
+        ),
         onAnnuler: () => ref
             .read(telechargementProvider.notifier)
             .annuler(widget.ressource.id),
@@ -647,6 +651,7 @@ class _ZoneTelechargement extends StatelessWidget {
                   ? _AProposer(
                       tailleTexte: tailleTexte,
                       onTelecharger: onTelecharger,
+                      bloqueDonneesMobiles: vue.bloqueDonneesMobiles,
                     )
                   : _InviteCompte(onCreerCompte: onCreerCompte),
           },
@@ -680,10 +685,19 @@ class _Pastille extends StatelessWidget {
 /// Document telechargeable (eleve connecte) : titre de DISPONIBILITE + bouton qui
 /// annonce la taille (regle 2 du contrat hors-ligne : on sait ce que ca coute).
 class _AProposer extends StatelessWidget {
-  const _AProposer({required this.tailleTexte, required this.onTelecharger});
+  const _AProposer({
+    required this.tailleTexte,
+    required this.onTelecharger,
+    this.bloqueDonneesMobiles = false,
+  });
 
   final String tailleTexte;
   final VoidCallback onTelecharger;
+
+  /// Le dernier appui a ete bloque par le reglage « Wi-Fi uniquement » en donnees
+  /// mobiles (lot « Qualite D ») : on l'explique sous le bouton, qui reste
+  /// disponible (l'eleve peut passer en Wi-Fi puis reessayer).
+  final bool bloqueDonneesMobiles;
 
   @override
   Widget build(BuildContext context) {
@@ -712,7 +726,46 @@ class _AProposer extends StatelessWidget {
           onPressed: onTelecharger,
           pleineLargeur: false,
         ),
+        if (bloqueDonneesMobiles) ...[
+          const SizedBox(height: 14),
+          _NoteWifiSeulement(),
+        ],
       ],
+    );
+  }
+}
+
+/// Message affiche quand un telechargement est bloque par le reglage « Wi-Fi
+/// uniquement » en donnees mobiles. Statut porte par le texte ET l'icone (jamais
+/// la seule couleur, SPEC §6.2) ; couleurs = palette auditee (fond/texte d'info).
+class _NoteWifiSeulement extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 320),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.wifi_off_outlined, size: 20, color: scheme.onPrimaryContainer),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Reglage « Wi-Fi uniquement » actif. Active le Wi-Fi pour '
+              'telecharger, ou change ce reglage dans ton Profil.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onPrimaryContainer,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

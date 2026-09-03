@@ -4,6 +4,17 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'package:fayemath_academy/core/network/etat_reseau.dart';
 import 'package:fayemath_academy/core/network/transition_reseau.dart';
+import 'package:fayemath_academy/core/network/type_interface_reseau.dart';
+
+/// Lecture ONE-SHOT du type d'interface reseau courant (lot « Qualite D » :
+/// decision « telecharger uniquement en Wi-Fi »), sans demarrer de flux. Vit dans
+/// `core/` comme toute la detection reseau (docs/ARCHITECTURE.md §3/§4). Meme
+/// limite assumee que [DetecteurReseau] : type d'interface, pas joignabilite.
+Future<TypeInterfaceReseau> interfaceReseauCourante([
+  Connectivity? connectivity,
+]) async => TypeInterfaceReseau.depuis(
+  await (connectivity ?? Connectivity()).checkConnectivity(),
+);
 
 /// Source de verite unique sur l'etat du reseau, exposee en un flux d'[EtatReseau]
 /// (docs/ARCHITECTURE.md §2/§4 : « la detection reseau » vit dans `core/`).

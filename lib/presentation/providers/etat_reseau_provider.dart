@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:fayemath_academy/core/network/detecteur_reseau.dart';
 import 'package:fayemath_academy/core/network/etat_reseau.dart';
+import 'package:fayemath_academy/core/network/type_interface_reseau.dart';
 
 /// L'etat du reseau, expose a toute l'application pour le bandeau du haut (Lot D).
 ///
@@ -18,3 +19,14 @@ final etatReseauProvider = StreamProvider<EtatReseau>((ref) {
   ref.onDispose(detecteur.liberer);
   return detecteur.flux;
 });
+
+/// Le type d'interface reseau COURANT (Wi-Fi / donnees mobiles / aucune), lu a la
+/// demande pour la decision « telecharger uniquement en Wi-Fi » (lot « Qualite D »).
+///
+/// Expose une FONCTION one-shot (valeur fraiche a chaque appel, l'interface a pu
+/// changer), volontairement distincte de [etatReseauProvider] (les 3 etats du
+/// bandeau, qui restent inchanges). Override en test par une valeur fixe : aucun
+/// widget-test ne touche le plugin natif `connectivity_plus`.
+final interfaceReseauProvider = Provider<Future<TypeInterfaceReseau> Function()>(
+  (ref) => interfaceReseauCourante,
+);

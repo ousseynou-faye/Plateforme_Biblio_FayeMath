@@ -17,10 +17,12 @@ import 'package:fayemath_academy/domain/entities/session_auth.dart';
 import 'package:fayemath_academy/domain/entities/utilisateur.dart';
 import 'package:fayemath_academy/domain/repositories/auth_repository.dart';
 import 'package:fayemath_academy/domain/repositories/catalogue_repository.dart';
+import 'package:fayemath_academy/domain/repositories/preferences_reglages_repository.dart';
 import 'package:fayemath_academy/domain/repositories/profil_repository.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
+import 'package:fayemath_academy/presentation/providers/reglages_provider.dart';
 import 'package:fayemath_academy/presentation/screens/profil_screen.dart';
 
 class _FauxAuthRepository implements AuthRepository {
@@ -73,6 +75,18 @@ class _FauxCatalogueRepository implements CatalogueRepository {
   Stream<List<Matiere>> observerMatieres() => Stream.value(lesMatieres);
 }
 
+class _FauxReglages implements PreferencesReglagesRepository {
+  bool wifiSeulement = true;
+
+  @override
+  Future<bool> telechargerEnWifiSeulement() async => wifiSeulement;
+
+  @override
+  Future<void> definirTelechargerEnWifiSeulement({required bool valeur}) async {
+    wifiSeulement = valeur;
+  }
+}
+
 class _FauxProfilRepository implements ProfilRepository {
   _FauxProfilRepository(this.profil);
 
@@ -100,6 +114,12 @@ Future<_FauxAuthRepository> _monter(
   WidgetTester tester, {
   required bool connecte,
 }) async {
+  // Surface haute : l'ecran Profil (ListView) tient en entier, tous ses elements
+  // sont construits (« Se deconnecter » est en bas et ne serait sinon pas rendu
+  // dans le viewport 600 px par defaut, ListView paresseuse).
+  await tester.binding.setSurfaceSize(const Size(600, 1600));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+
   final auth = _FauxAuthRepository(
     session: connecte ? const SessionAuth(utilisateurId: 'u1') : null,
   );
@@ -107,6 +127,7 @@ Future<_FauxAuthRepository> _monter(
     ProviderScope(
       overrides: [
         authRepositoryProvider.overrideWithValue(auth),
+        preferencesReglagesRepositoryProvider.overrideWithValue(_FauxReglages()),
         catalogueRepositoryProvider.overrideWithValue(
           _FauxCatalogueRepository(const [_classe6e], const [_maths]),
         ),
@@ -144,11 +165,14 @@ void main() {
     expect(find.text('Mathématiques'), findsOneWidget);
     expect(find.text('Compte gratuit'), findsOneWidget);
 
-    // Les deux sections et leurs lignes.
+    // Les sections et leurs lignes.
     expect(find.text('Mon compte'), findsOneWidget);
     expect(find.text('Classe, serie et matieres'), findsOneWidget);
-    expect(find.text('Parametres et notifications'), findsOneWidget);
     expect(find.text('Aide et contact'), findsOneWidget);
+    // Section « Parametres » (lot Qualite D) : la bascule « Wi-Fi uniquement »
+    // remplace le placeholder « Parametres et notifications ».
+    expect(find.text('Parametres'), findsOneWidget);
+    expect(find.text('Telecharger uniquement en Wi-Fi'), findsOneWidget);
     expect(find.text('Aller plus loin'), findsOneWidget);
     expect(find.text('Decouvrir Premium'), findsOneWidget);
 
@@ -172,7 +196,7 @@ void main() {
   ) async {
     await _monter(tester, connecte: true);
 
-    await tester.tap(find.text('Parametres et notifications'));
+    await tester.tap(find.text('Aide et contact'));
     await tester.pump(); // laisse apparaitre le SnackBar
 
     expect(find.textContaining('bientot disponible'), findsOneWidget);

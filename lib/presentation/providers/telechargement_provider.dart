@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:fayemath_academy/core/errors/echec_telechargement.dart';
+import 'package:fayemath_academy/core/network/autorisation_telechargement.dart';
 import 'package:fayemath_academy/domain/entities/etat_telechargement.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/domain/repositories/telechargement_repository.dart';
 import 'package:fayemath_academy/domain/usecases/resolution_etat_telechargement.dart';
+import 'package:fayemath_academy/presentation/providers/etat_reseau_provider.dart';
+import 'package:fayemath_academy/presentation/providers/reglages_provider.dart';
 
 /// Fournit l'implementation du moteur de telechargement. Comme les autres
 /// repositories : NON resolue ici (`presentation/` n'importe pas `data/`,
@@ -30,6 +33,7 @@ class VueTelechargement {
     this.progression = 0,
     this.cause,
     this.cheminLocal,
+    this.bloqueDonneesMobiles = false,
   });
 
   /// Le PDF telecharge est present sur l'appareil.
@@ -50,7 +54,15 @@ class VueTelechargement {
   /// Chemin local du fichier, renseigne quand [estLocal] (le lecteur l'ouvre).
   final String? cheminLocal;
 
-  /// L'etat unique, derive des trois faits (resolveur du Lot A).
+  /// Le dernier appui sur « Telecharger » a ete BLOQUE par le reglage « Wi-Fi
+  /// uniquement » alors qu'on etait en donnees mobiles (lot « Qualite D »). N'est
+  /// PAS un echec de transfert (aucun transfert n'a demarre) : l'etat reste
+  /// `telechargeable`, ce drapeau dit juste a l'ecran d'afficher le message
+  /// « passe en Wi-Fi ou change le reglage ». Efface au prochain essai reussi.
+  final bool bloqueDonneesMobiles;
+
+  /// L'etat unique, derive des trois faits (resolveur du Lot A). Le blocage
+  /// « Wi-Fi uniquement » n'en fait pas partie (le document reste telechargeable).
   EtatTelechargement get etat => ResolutionEtatTelechargement.resoudre(
     estLocal: estLocal,
     enCours: enCours,
@@ -66,11 +78,19 @@ class VueTelechargement {
           other.aEchoue == aEchoue &&
           other.progression == progression &&
           other.cause == cause &&
-          other.cheminLocal == cheminLocal;
+          other.cheminLocal == cheminLocal &&
+          other.bloqueDonneesMobiles == bloqueDonneesMobiles;
 
   @override
-  int get hashCode =>
-      Object.hash(estLocal, enCours, aEchoue, progression, cause, cheminLocal);
+  int get hashCode => Object.hash(
+    estLocal,
+    enCours,
+    aEchoue,
+    progression,
+    cause,
+    cheminLocal,
+    bloqueDonneesMobiles,
+  );
 }
 
 /// L'etat des telechargements, une [VueTelechargement] par `ressourceId`. Un seul
@@ -123,10 +143,30 @@ class TelechargementNotifier extends Notifier<Map<String, VueTelechargement>> {
 
   /// Lance le telechargement d'un document — action EXPLICITE de l'eleve. Sans
   /// effet si le document est deja la ou deja en cours.
-  void demarrer(Ressource ressource) {
+  ///
+  /// Verrou « Wi-Fi uniquement » (lot « Qualite D ») : si le reglage est actif et
+  /// qu'on est en donnees mobiles, on NE demarre PAS — on publie un etat
+  /// « bloque » pour que l'ecran invite a passer en Wi-Fi ou a changer le reglage.
+  /// La lecture du type d'interface est asynchrone (d'ou le `Future`), mais
+  /// l'appel reste « fire-and-forget » cote ecran (rien a attendre).
+  Future<void> demarrer(Ressource ressource) async {
     final id = ressource.id;
     final actuel = _de(id);
     if (actuel.enCours || actuel.estLocal) return;
+
+    final wifiSeulement = ref.read(telechargerEnWifiSeulementProvider);
+    final interface = await ref.read(interfaceReseauProvider)();
+    if (AutorisationTelechargement.decider(
+          wifiSeulement: wifiSeulement,
+          interface: interface,
+        ) ==
+        DecisionTelechargement.bloqueDonneesMobiles) {
+      _publier(id, const VueTelechargement(bloqueDonneesMobiles: true));
+      return;
+    }
+    // L'etat a pu changer pendant la lecture asynchrone de l'interface.
+    final apres = _de(id);
+    if (apres.enCours || apres.estLocal) return;
 
     _publier(id, const VueTelechargement(enCours: true));
     _abonnements[id] = ref
