@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:fayemath_academy/core/errors/echec_telechargement.dart';
 import 'package:fayemath_academy/core/network/etat_reseau.dart';
@@ -168,6 +169,50 @@ Future<void> _monter(
       child: MaterialApp(
         home: LecteurDocumentScreen(ressource: ressource, chapitre: _chapitre),
       ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+/// Variante avec un vrai routeur, pour prouver la NAVIGATION vers « Voir l'offre »
+/// (etape 25, lot F) : la route racine `offre` est ici un ecran sentinelle.
+Future<void> _monterAvecRouteur(WidgetTester tester, Ressource ressource) async {
+  final router = GoRouter(
+    initialLocation: '/',
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) =>
+            LecteurDocumentScreen(ressource: ressource, chapitre: _chapitre),
+      ),
+      GoRoute(
+        name: 'offre',
+        path: '/offre',
+        builder: (context, state) =>
+            const Scaffold(body: Text('ECRAN_OFFRE_SENTINELLE')),
+      ),
+    ],
+  );
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        etatReseauProvider.overrideWith(
+          (ref) => const Stream<EtatReseau>.empty(),
+        ),
+        catalogueRepositoryProvider.overrideWithValue(
+          _FauxCatalogueRepository(const [_classe6e], const [_maths]),
+        ),
+        telechargementRepositoryProvider.overrideWithValue(
+          _FauxTelechargementRepository(),
+        ),
+        authRepositoryProvider.overrideWithValue(
+          _FauxAuthRepository(sessionInitiale: const SessionAuth(utilisateurId: 'u1')),
+        ),
+        abonnementRepositoryProvider.overrideWithValue(
+          _FauxAbonnementRepository(null),
+        ),
+      ],
+      child: MaterialApp.router(routerConfig: router),
     ),
   );
   await tester.pumpAndSettle();
@@ -380,4 +425,22 @@ void main() {
       expect(find.text('Creer un compte'), findsNothing);
     },
   );
+
+  testWidgets('« Voir l\'offre » mene a l\'ecran de l\'offre (lot F)', (
+    tester,
+  ) async {
+    await _monterAvecRouteur(
+      tester,
+      _ressource(
+        type: TypeRessource.corrige,
+        cheminStorage: '6e/maths/corrige.pdf',
+        premium: true,
+      ),
+    );
+
+    expect(find.text('ECRAN_OFFRE_SENTINELLE'), findsNothing);
+    await tester.tap(find.text('Voir l\'offre'));
+    await tester.pumpAndSettle();
+    expect(find.text('ECRAN_OFFRE_SENTINELLE'), findsOneWidget);
+  });
 }

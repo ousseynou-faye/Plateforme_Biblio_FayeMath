@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:fayemath_academy/domain/usecases/disponibilite_hors_ligne.dart';
+import 'package:fayemath_academy/domain/usecases/droit_acces_document.dart';
 import 'package:fayemath_academy/domain/usecases/regroupement_documents_hors_ligne.dart';
+import 'package:fayemath_academy/presentation/providers/abonnement_provider.dart';
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
@@ -15,6 +17,14 @@ class ApercuHorsLigne {
   final List<GroupeTelechargements> groupes;
 
   bool get estVide => groupes.isEmpty;
+
+  /// Nombre de documents REELLEMENT presents sur l'appareil (somme des documents
+  /// de tous les groupes). Sert la seconde ligne factuelle de l'anneau (« N
+  /// documents sur l'appareil »), a cote de la couverture par chapitre COMPLET
+  /// (report de l'etape 24 : un chapitre incomplet mais avec des documents ne
+  /// doit pas se traduire par un decourageant « 0 document »).
+  int get nombrePresents =>
+      groupes.fold(0, (total, groupe) => total + groupe.documents.length);
 }
 
 /// L'apercu « Mes telechargements » d'une bibliotheque (classe, matiere).
@@ -38,9 +48,17 @@ final apercuHorsLigneProvider = FutureProvider.family<ApercuHorsLigne, CibleChap
       .listerPresents();
   final idsPresents = presents.map((r) => r.id).toSet();
 
-  // Anneau : toutes les ressources ACCESSIBLES de la bibliotheque. « Accessible »
-  // = non premium en V1 (aucun abonnement encore ; le filtre par abonnement
-  // actif arrivera avec le paiement, V2). Chaque chapitre est lu en cache local.
+  // Anneau : toutes les ressources ACCESSIBLES de la bibliotheque. Depuis
+  // l'etape 25, « accessible » = le vrai DROIT d'acces ([DroitAccesDocument], via
+  // [accesDocumentProvider]) et non plus « non premium » : un abonne y gagne ses
+  // corriges/evaluations, donc le DENOMINATEUR augmente (le pourcentage peut
+  // baisser — c'est la definition honnete de la couverture, decision point 5.7).
+  // Deux etats de droit seulement (gratuit / premium) : deux lectures suffisent.
+  final accesGratuit = ref.watch(accesDocumentProvider(false));
+  final accesPremium = ref.watch(accesDocumentProvider(true));
+  bool estAccessible(bool premium) =>
+      (premium ? accesPremium : accesGratuit) == AccesDocument.autorise;
+
   final repo = ref.watch(ressourceRepositoryProvider);
   // Lecture PONCTUELLE par chapitre : `.first` prend la premiere emission du
   // flux offline-first (le cache local, ou la 1re synchro si le cache est
@@ -54,7 +72,7 @@ final apercuHorsLigneProvider = FutureProvider.family<ApercuHorsLigne, CibleChap
   final accessibles = [
     for (final liste in parChapitre)
       for (final ressource in liste)
-        if (!ressource.premium) ressource,
+        if (estAccessible(ressource.premium)) ressource,
   ];
   final ratio = DisponibiliteHorsLigne.calculer(
     chapitres: chapitres,

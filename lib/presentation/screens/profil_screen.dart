@@ -64,7 +64,10 @@ class ProfilScreen extends ConsumerWidget {
             const SizedBox(height: 14),
             const _TitreSection('Aller plus loin'),
             _CartePremium(
-              onTap: () => _bientot(context, "L'offre Premium"),
+              // « Voir l'offre » (ecran 17 minimal, etape 25 lot F) : referme la
+              // dette du placeholder du lot Qualite C. Chemin en litteral car
+              // `presentation/` n'importe pas `routing/` (ARCHITECTURE §3).
+              onTap: () => context.pushNamed('offre'),
             ),
             const SizedBox(height: 14),
             _CarteDeconnexion(
@@ -396,8 +399,10 @@ class _Reglage extends StatelessWidget {
   }
 }
 
-/// Grande carte indigo « Decouvrir Premium ». Mene (Phase 4) au comparatif
-/// Gratuit/Premium (ecran 17, non construit) : placeholder pour l'instant.
+/// Grande carte indigo « Decouvrir Premium ». Mene a l'ecran « Voir l'offre »
+/// (ecran 17 minimal, etape 25 lot F). Son TEXTE (« de la 6e a la Terminale »)
+/// n'est pas retouche ici : sa reformulation est un point de l'etape 26 ; le lot F
+/// se contente de brancher la navigation, pas de reecrire la carte.
 ///
 /// Ecart assume a la maquette : degrade indigo rendu en aplat (seul l'indigo
 /// principal est un token de theme ; l'indigo clair du degrade n'est pas expose)

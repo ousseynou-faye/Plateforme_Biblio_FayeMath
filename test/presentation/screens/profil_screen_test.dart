@@ -7,6 +7,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:fayemath_academy/core/theme/theme.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
@@ -154,6 +155,55 @@ Future<_FauxAuthRepository> _monter(
   return auth;
 }
 
+/// Monte le Profil dans un vrai routeur, pour prouver que « Decouvrir Premium »
+/// mene a l'ecran « Voir l'offre » (ecran 17 minimal, etape 25 lot F). La route
+/// racine `offre` est ici un ecran sentinelle.
+Future<void> _monterAvecRouteur(WidgetTester tester) async {
+  await tester.binding.setSurfaceSize(const Size(600, 1600));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+
+  final router = GoRouter(
+    initialLocation: '/',
+    routes: [
+      GoRoute(path: '/', builder: (context, state) => const ProfilScreen()),
+      GoRoute(
+        name: 'offre',
+        path: '/offre',
+        builder: (context, state) =>
+            const Scaffold(body: Text('ECRAN_OFFRE_SENTINELLE')),
+      ),
+    ],
+  );
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        authRepositoryProvider.overrideWithValue(
+          _FauxAuthRepository(session: const SessionAuth(utilisateurId: 'u1')),
+        ),
+        preferencesReglagesRepositoryProvider.overrideWithValue(_FauxReglages()),
+        catalogueRepositoryProvider.overrideWithValue(
+          _FauxCatalogueRepository(const [_classe6e], const [_maths]),
+        ),
+        profilRepositoryProvider.overrideWithValue(
+          _FauxProfilRepository(
+            Utilisateur(
+              id: 'u1',
+              classeId: 'c-6e',
+              serie: null,
+              creeLe: DateTime(2026, 9, 3),
+            ),
+          ),
+        ),
+      ],
+      child: MaterialApp.router(
+        theme: ThemeApplication.clair,
+        routerConfig: router,
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('connecte : identite adaptee + sections + deconnexion', (
     tester,
@@ -226,5 +276,16 @@ void main() {
 
     // L'invite est ressorti du mode invite (retour a « deconnecte »).
     expect(container.read(etatAuthProvider), isA<AuthDeconnecte>());
+  });
+
+  testWidgets('« Decouvrir Premium » mene a l\'ecran de l\'offre (lot F)', (
+    tester,
+  ) async {
+    await _monterAvecRouteur(tester);
+
+    expect(find.text('ECRAN_OFFRE_SENTINELLE'), findsNothing);
+    await tester.tap(find.text('Decouvrir Premium'));
+    await tester.pumpAndSettle();
+    expect(find.text('ECRAN_OFFRE_SENTINELLE'), findsOneWidget);
   });
 }

@@ -19,6 +19,7 @@ import 'package:fayemath_academy/presentation/screens/lecteur_document_screen.da
 import 'package:fayemath_academy/presentation/screens/liste_chapitres_screen.dart';
 import 'package:fayemath_academy/presentation/screens/ma_progression_screen.dart';
 import 'package:fayemath_academy/presentation/screens/mes_telechargements_screen.dart';
+import 'package:fayemath_academy/presentation/screens/offre_premium_screen.dart';
 import 'package:fayemath_academy/presentation/screens/onboarding_screen.dart';
 import 'package:fayemath_academy/presentation/screens/profil_screen.dart';
 import 'package:fayemath_academy/presentation/screens/tableau_bord_screen.dart';
@@ -58,6 +59,14 @@ const cheminChapitre = '/chapitre';
 /// Atteinte depuis la carte de progression du tableau de bord (onglet Accueil).
 const cheminMaProgression = '/ma-progression';
 const nomRouteMaProgression = 'ma-progression';
+
+/// « Voir l'offre » (ecran 17 minimal, etape 25) : route RACINE empilee au-dessus
+/// des onglets (fleche retour), comme le detail et le lecteur. Atteinte depuis les
+/// trois points ou un document premium est verrouille (detail, lecteur, carte du
+/// Profil). Le nom est partage par sa VALEUR cote ecrans (litteral `'offre'`),
+/// jamais par import de `routing/` (regle de dependance, docs/ARCHITECTURE.md §3).
+const cheminOffre = '/offre';
+const nomRouteOffre = 'offre';
 
 /// Nom de la route de detail d'un chapitre. La liste ouvre cet ecran par
 /// `context.pushNamed('chapitre', ...)`. `presentation/` ne peut pas importer
@@ -218,6 +227,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: cheminMaProgression,
         builder: (context, state) => const MaProgressionScreen(),
       ),
+      // « Voir l'offre » (ecran 17 minimal) : route RACINE, sans argument.
+      GoRoute(
+        name: nomRouteOffre,
+        path: cheminOffre,
+        builder: (context, state) => const OffrePremiumScreen(),
+      ),
     ],
   );
 });
@@ -234,6 +249,7 @@ bool _estZoneContenu(String emplacement) =>
     emplacement == cheminMesTelechargements ||
     emplacement == cheminProfil ||
     emplacement == cheminMaProgression ||
+    emplacement == cheminOffre ||
     emplacement.startsWith('$cheminChapitre/');
 
 /// Ou l'utilisateur doit-il se trouver, selon son etat d'auth et — s'il est

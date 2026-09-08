@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:fayemath_academy/core/network/etat_reseau.dart';
 import 'package:fayemath_academy/core/theme/theme.dart';
@@ -180,6 +181,58 @@ Future<void> _monter(
   await tester.pumpAndSettle();
 }
 
+/// Variante avec un vrai routeur, pour prouver la NAVIGATION vers « Voir l'offre »
+/// (etape 25, lot F) : la route racine `offre` est ici un ecran sentinelle. Le
+/// detail est monte a `/` et le tap du document premium doit y mener.
+Future<void> _monterAvecRouteur(
+  WidgetTester tester, {
+  required List<Ressource> ressources,
+  SessionAuth? session = const SessionAuth(utilisateurId: 'u1'),
+}) async {
+  final router = GoRouter(
+    initialLocation: '/',
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) =>
+            const DetailChapitreScreen(chapitre: _chapitre),
+      ),
+      GoRoute(
+        name: 'offre',
+        path: '/offre',
+        builder: (context, state) =>
+            const Scaffold(body: Text('ECRAN_OFFRE_SENTINELLE')),
+      ),
+    ],
+  );
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        etatReseauProvider.overrideWith(
+          (ref) => const Stream<EtatReseau>.empty(),
+        ),
+        authRepositoryProvider.overrideWithValue(
+          _FauxAuthRepository(session: session),
+        ),
+        ressourceRepositoryProvider.overrideWithValue(
+          _FauxRessourceRepository(ressources),
+        ),
+        progressionRepositoryProvider.overrideWithValue(
+          _FauxProgressionRepository(),
+        ),
+        abonnementRepositoryProvider.overrideWithValue(
+          _FauxAbonnementRepository(null),
+        ),
+      ],
+      child: MaterialApp.router(
+        theme: ThemeApplication.clair,
+        routerConfig: router,
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('affiche le titre, le compteur, les documents et leur statut', (
     tester,
@@ -348,15 +401,23 @@ void main() {
       // Le cours gratuit est ouvrable ; le corrige premium est verrouille.
       expect(find.bySemanticsLabel(RegExp(r'Cours,.*ouvrir')), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp(r"voir l'offre")), findsOneWidget);
-
-      // Taper le corrige premium n'ouvre PAS le lecteur : message « offre Premium ».
-      await tester.tap(find.text('Corrige detaille'));
-      await tester.pump();
-      expect(
-        find.text('Ce document fait partie de l\'offre Premium.'),
-        findsOneWidget,
-      );
       handle.dispose();
+    },
+  );
+
+  testWidgets(
+    'taper un document premium verrouille mene a « Voir l\'offre » (lot F)',
+    (tester) async {
+      await _monterAvecRouteur(tester, ressources: [corrige()]);
+
+      // On est bien sur le detail, pas encore sur l'offre.
+      expect(find.text('ECRAN_OFFRE_SENTINELLE'), findsNothing);
+
+      // Taper le corrige premium empile la route racine `offre` (aucun lecteur).
+      await tester.tap(find.text('Corrige detaille'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ECRAN_OFFRE_SENTINELLE'), findsOneWidget);
     },
   );
 

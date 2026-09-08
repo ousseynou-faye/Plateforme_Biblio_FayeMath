@@ -192,7 +192,10 @@ class _Liste extends StatelessWidget {
     return ListView(
       padding: EdgeInsets.zero,
       children: [
-        _EnteteCompletion(ratio: apercu.ratio),
+        _EnteteCompletion(
+          ratio: apercu.ratio,
+          nombrePresents: apercu.nombrePresents,
+        ),
         Align(
           alignment: Alignment.centerRight,
           child: Padding(
@@ -222,13 +225,21 @@ class _Liste extends StatelessWidget {
   }
 }
 
-/// L'anneau de couverture (maquette ecran 8) : « X % des chapitres hors-ligne »
-/// et « X chapitres sur Y disponibles hors-ligne ». C'est une COUVERTURE de
-/// contenu, jamais un espace disque ni un quota (SPEC §4.3).
+/// L'anneau de couverture (maquette ecran 8) : « X % des chapitres COMPLETS
+/// hors-ligne », « X sur Y chapitres complets », et une seconde ligne factuelle
+/// « N documents sur l'appareil ». C'est une COUVERTURE de contenu, jamais un
+/// espace disque ni un quota (SPEC §4.3).
+///
+/// Le mot « complet » et la seconde ligne repondent au report de l'etape 24 :
+/// l'anneau pouvait afficher « 0 % — 0 sur 19 » alors que des documents etaient
+/// bien presents (la couverture compte les chapitres dont TOUS les documents
+/// accessibles sont la). On precise donc le denominateur ET on montre le compte
+/// reel de documents presents, pour ne pas decourager a tort.
 class _EnteteCompletion extends StatelessWidget {
-  const _EnteteCompletion({required this.ratio});
+  const _EnteteCompletion({required this.ratio, required this.nombrePresents});
 
   final RatioHorsLigne ratio;
+  final int nombrePresents;
 
   @override
   Widget build(BuildContext context) {
@@ -238,7 +249,11 @@ class _EnteteCompletion extends StatelessWidget {
     final faits = ratio.chapitresHorsLigne;
     // Formulation correcte pour toute valeur (« 0 sur 19 », « 1 sur 2 »), sans
     // piege de singulier/pluriel.
-    final texteCompte = '$faits sur $total chapitres disponibles hors-ligne';
+    final texteCompte = '$faits sur $total chapitres complets hors-ligne';
+    // Accord singulier/pluriel (regression evitee, decision etape 24).
+    final texteDocuments = nombrePresents == 1
+        ? '1 document sur l\'appareil'
+        : '$nombrePresents documents sur l\'appareil';
 
     return Container(
       width: double.infinity,
@@ -252,7 +267,7 @@ class _EnteteCompletion extends StatelessWidget {
           // d'ecran (l'anneau seul ne dit rien).
           Semantics(
             label: '${ratio.pourcentage} pour cent des chapitres '
-                'disponibles hors-ligne',
+                'complets hors-ligne',
             child: SizedBox(
               width: 64,
               height: 64,
@@ -292,6 +307,13 @@ class _EnteteCompletion extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   texteCompte,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  texteDocuments,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),

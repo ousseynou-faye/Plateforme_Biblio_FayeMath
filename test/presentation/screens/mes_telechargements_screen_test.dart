@@ -112,10 +112,13 @@ void main() {
     await _monter(tester, apercu);
 
     expect(find.text('50 %'), findsOneWidget);
+    // Libelle precise « complets » + seconde ligne factuelle (report etape 24,
+    // lot F) : le groupe porte 1 document present.
     expect(
-      find.text('1 sur 2 chapitres disponibles hors-ligne'),
+      find.text('1 sur 2 chapitres complets hors-ligne'),
       findsOneWidget,
     );
+    expect(find.text('1 document sur l\'appareil'), findsOneWidget);
     expect(find.text('Chapitre 1 · Les entiers naturels'), findsOneWidget);
     // Le libelle d'affichage du type (getter pur, etape 16), pas la valeur SQL.
     expect(find.text('Cours'), findsOneWidget);

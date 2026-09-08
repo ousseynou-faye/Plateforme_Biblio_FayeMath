@@ -421,11 +421,11 @@ class _LigneDocument extends ConsumerWidget {
             ),
           );
       case AccesDocument.abonnementRequis:
-        // « Voir l'offre » : la route + l'ecran minimal arrivent au lot F.
-        _afficherMessage(
-          context,
-          'Ce document fait partie de l\'offre Premium.',
-        );
+        // « Voir l'offre » : ecran 17 minimal (etape 25, lot F). On EMPILE la
+        // route racine `offre` (litteral : `presentation/` n'importe pas
+        // `routing/`, ARCHITECTURE §3) ; aucun octet n'est consomme, aucun
+        // lecteur ouvert.
+        context.pushNamed('offre');
     }
   }
 }
