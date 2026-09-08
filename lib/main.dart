@@ -12,6 +12,7 @@ import 'package:fayemath_academy/data/local/stockage_onboarding.dart';
 import 'package:fayemath_academy/data/local/stockage_reglages.dart';
 import 'package:fayemath_academy/data/local/stockage_session_securise.dart';
 import 'package:fayemath_academy/data/remote/telechargeur_fichier.dart';
+import 'package:fayemath_academy/data/repositories/abonnement_repository.dart';
 import 'package:fayemath_academy/data/repositories/auth_repository.dart';
 import 'package:fayemath_academy/data/repositories/catalogue_repository.dart';
 import 'package:fayemath_academy/data/repositories/chapitre_repository.dart';
@@ -19,6 +20,7 @@ import 'package:fayemath_academy/data/repositories/profil_repository.dart';
 import 'package:fayemath_academy/data/repositories/progression_repository.dart';
 import 'package:fayemath_academy/data/repositories/ressource_repository.dart';
 import 'package:fayemath_academy/data/repositories/telechargement_repository.dart';
+import 'package:fayemath_academy/presentation/providers/abonnement_provider.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/chapitre_provider.dart';
@@ -119,6 +121,12 @@ Future<void> main() async {
         // pousse Supabase best-effort. Meme base locale partagee.
         progressionRepositoryProvider.overrideWith(
           (ref) => ProgressionRepositoryOfflineFirst(baseLocale, client),
+        ),
+        // Abonnement premium (etape 25) : LECTURE SEULE offline-first (cache Drift
+        // + rafraichissement Supabase). Sert la regle de verrouillage premium ;
+        // aucune ecriture cote app (RLS SELECT de soi, seul service_role cree).
+        abonnementRepositoryProvider.overrideWith(
+          (ref) => AbonnementRepositoryOfflineFirst(baseLocale, client),
         ),
         // Moteur de telechargement hors-ligne (etape 19) : URL signee Supabase +
         // transfert dio + trace en base. Ecrit le PDF dans l'espace prive de
