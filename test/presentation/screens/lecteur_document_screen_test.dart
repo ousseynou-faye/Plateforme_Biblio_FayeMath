@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fayemath_academy/core/errors/echec_telechargement.dart';
 import 'package:fayemath_academy/core/network/etat_reseau.dart';
+import 'package:fayemath_academy/domain/entities/abonnement.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
 import 'package:fayemath_academy/domain/entities/cycle.dart';
@@ -19,9 +20,11 @@ import 'package:fayemath_academy/domain/entities/matiere.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/domain/entities/session_auth.dart';
 import 'package:fayemath_academy/domain/entities/type_ressource.dart';
+import 'package:fayemath_academy/domain/repositories/abonnement_repository.dart';
 import 'package:fayemath_academy/domain/repositories/auth_repository.dart';
 import 'package:fayemath_academy/domain/repositories/catalogue_repository.dart';
 import 'package:fayemath_academy/domain/repositories/telechargement_repository.dart';
+import 'package:fayemath_academy/presentation/providers/abonnement_provider.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/etat_reseau_provider.dart';
@@ -55,6 +58,17 @@ class _FauxTelechargementRepository implements TelechargementRepository {
 
   @override
   Future<void> supprimer(String ressourceId) async {}
+}
+
+/// Faux abonnement : renvoie l'abonnement fourni (ou null).
+class _FauxAbonnementRepository implements AbonnementRepository {
+  _FauxAbonnementRepository(this.abonnement);
+
+  final Abonnement? abonnement;
+
+  @override
+  Stream<Abonnement?> observerAbonnement(String utilisateurId) =>
+      Stream.value(abonnement);
 }
 
 /// Faux repository d'auth minimal : une session presente = eleve connecte.
@@ -107,6 +121,7 @@ const _chapitre = Chapitre(
 Ressource _ressource({
   required TypeRessource type,
   required String? cheminStorage,
+  bool premium = false,
 }) => Ressource(
   id: 'r-1',
   chapitreId: 'ch-1',
@@ -115,7 +130,7 @@ Ressource _ressource({
   type: type,
   titre: 'Document de test',
   tailleOctets: 12345,
-  premium: false,
+  premium: premium,
   version: 1,
   cheminStorage: cheminStorage,
   ordre: 1,
@@ -125,6 +140,7 @@ Future<void> _monter(
   WidgetTester tester,
   Ressource ressource, {
   bool connecte = true,
+  Abonnement? abonnement,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -144,6 +160,9 @@ Future<void> _monter(
                 ? const SessionAuth(utilisateurId: 'u1')
                 : null,
           ),
+        ),
+        abonnementRepositoryProvider.overrideWithValue(
+          _FauxAbonnementRepository(abonnement),
         ),
       ],
       child: MaterialApp(
@@ -341,4 +360,24 @@ void main() {
     expect(find.text('Creer un compte'), findsOneWidget);
     expect(find.textContaining('Telecharger ('), findsNothing);
   });
+
+  testWidgets(
+    'connecte sans abonnement, document premium : « Voir l\'offre » (pas de telechargement)',
+    (tester) async {
+      await _monter(
+        tester,
+        _ressource(
+          type: TypeRessource.corrige,
+          cheminStorage: '6e/maths/corrige.pdf',
+          premium: true,
+        ),
+      );
+
+      // Verrou premium (etape 25) : on mene a l'offre, on ne propose ni le
+      // telechargement (aucun octet) ni « Creer un compte » (l'eleve est connecte).
+      expect(find.text('Voir l\'offre'), findsOneWidget);
+      expect(find.textContaining('Telecharger ('), findsNothing);
+      expect(find.text('Creer un compte'), findsNothing);
+    },
+  );
 }

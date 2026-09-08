@@ -7,7 +7,9 @@ import 'package:fayemath_academy/core/network/autorisation_telechargement.dart';
 import 'package:fayemath_academy/domain/entities/etat_telechargement.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/domain/repositories/telechargement_repository.dart';
+import 'package:fayemath_academy/domain/usecases/droit_acces_document.dart';
 import 'package:fayemath_academy/domain/usecases/resolution_etat_telechargement.dart';
+import 'package:fayemath_academy/presentation/providers/abonnement_provider.dart';
 import 'package:fayemath_academy/presentation/providers/etat_reseau_provider.dart';
 import 'package:fayemath_academy/presentation/providers/reglages_provider.dart';
 
@@ -153,6 +155,18 @@ class TelechargementNotifier extends Notifier<Map<String, VueTelechargement>> {
     final id = ressource.id;
     final actuel = _de(id);
     if (actuel.enCours || actuel.estLocal) return;
+
+    // Verrou premium (etape 25) : refus LOCAL avant tout appel reseau. Un document
+    // auquel l'eleve n'a pas droit (invite, ou premium sans abonnement actif) ne
+    // consomme AUCUN octet — l'ecran affiche deja l'etat verrouille (« Voir
+    // l'offre » / « Creer un compte »), ce garde-fou couvre les cas ou `demarrer`
+    // serait appele quand meme. Le serveur (policy Storage) reste le filet en cas
+    // de desynchronisation. Un document deja LOCAL est ouvert plus haut (decision
+    // 5.6) : il n'atteint jamais ce point.
+    if (ref.read(accesDocumentProvider(ressource.premium)) !=
+        AccesDocument.autorise) {
+      return;
+    }
 
     final wifiSeulement = ref.read(telechargerEnWifiSeulementProvider);
     final interface = await ref.read(interfaceReseauProvider)();

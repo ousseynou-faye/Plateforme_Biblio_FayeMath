@@ -5,11 +5,17 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fayemath_academy/core/errors/echec_telechargement.dart';
 import 'package:fayemath_academy/core/network/type_interface_reseau.dart';
+import 'package:fayemath_academy/domain/entities/abonnement.dart';
 import 'package:fayemath_academy/domain/entities/etat_telechargement.dart';
+import 'package:fayemath_academy/domain/entities/formule_abonnement.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
+import 'package:fayemath_academy/domain/entities/session_auth.dart';
 import 'package:fayemath_academy/domain/entities/type_ressource.dart';
+import 'package:fayemath_academy/domain/repositories/abonnement_repository.dart';
 import 'package:fayemath_academy/domain/repositories/preferences_reglages_repository.dart';
 import 'package:fayemath_academy/domain/repositories/telechargement_repository.dart';
+import 'package:fayemath_academy/presentation/providers/abonnement_provider.dart';
+import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/etat_reseau_provider.dart';
 import 'package:fayemath_academy/presentation/providers/reglages_provider.dart';
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
@@ -50,7 +56,28 @@ class _FauxReglages implements PreferencesReglagesRepository {
   }
 }
 
-/// Une ressource minimale pour les tests (un cours de chapitre).
+/// Faux abonnement : renvoie l'abonnement fourni (ou null).
+class _FauxAbonnementRepository implements AbonnementRepository {
+  _FauxAbonnementRepository(this.abonnement);
+
+  final Abonnement? abonnement;
+
+  @override
+  Stream<Abonnement?> observerAbonnement(String utilisateurId) =>
+      Stream.value(abonnement);
+}
+
+/// Etat d'authentification fige (evite d'imiter tout le contrat AuthRepository).
+class _EtatAuthFixe extends EtatAuthNotifier {
+  _EtatAuthFixe(this._initial);
+
+  final EtatAuth _initial;
+
+  @override
+  EtatAuth build() => _initial;
+}
+
+/// Une ressource minimale pour les tests (un cours de chapitre, gratuit).
 Ressource _ressource(String id) => Ressource(
   id: id,
   chapitreId: 'c1',
@@ -65,6 +92,30 @@ Ressource _ressource(String id) => Ressource(
   ordre: 1,
 );
 
+/// Une ressource premium (un corrige) pour les tests du verrou d'acces.
+Ressource _ressourcePremium(String id) => Ressource(
+  id: id,
+  chapitreId: 'c1',
+  classeId: null,
+  matiereId: null,
+  type: TypeRessource.corrige,
+  titre: 'Corrige',
+  tailleOctets: 60 * 1024,
+  premium: true,
+  version: 1,
+  cheminStorage: '6e/mathematiques/01/corrige.pdf',
+  ordre: 4,
+);
+
+Abonnement _abonnementActif() => Abonnement(
+  id: 'a1',
+  utilisateurId: 'u1',
+  formule: FormuleAbonnement.mensuel,
+  dateDebut: DateTime(2026, 1, 1),
+  dateFin: DateTime.now().add(const Duration(days: 30)),
+  referencePaiement: null,
+);
+
 /// Laisse tourner les microtaches pour que le flux / les futures delivrent.
 Future<void> laisserDelivrer() => Future<void>.delayed(Duration.zero);
 
@@ -73,6 +124,11 @@ void main() {
     TelechargementRepository repository, {
     bool wifiSeulement = false,
     TypeInterfaceReseau interface = TypeInterfaceReseau.wifi,
+    // Verrou premium (etape 25) : par defaut un eleve CONNECTE sans abonnement.
+    // Pour un document gratuit, cela donne « autorise » -> les tests existants
+    // restent inchanges.
+    EtatAuth etat = const AuthConnecte(SessionAuth(utilisateurId: 'u1')),
+    Abonnement? abonnement,
   }) {
     final container = ProviderContainer(
       overrides: [
@@ -83,11 +139,16 @@ void main() {
           _FauxReglages(wifiSeulement),
         ),
         interfaceReseauProvider.overrideWithValue(() async => interface),
+        etatAuthProvider.overrideWith(() => _EtatAuthFixe(etat)),
+        abonnementRepositoryProvider.overrideWithValue(
+          _FauxAbonnementRepository(abonnement),
+        ),
       ],
     );
     addTearDown(container.dispose);
-    // Garde la vue de r1 active pendant le test.
+    // Garde la vue de r1 et le flux d'abonnement actifs pendant le test.
     container.listen(vueTelechargementProvider('r1'), (_, _) {});
+    container.listen(abonnementPremiumProvider, (_, _) {});
     return container;
   }
 
@@ -189,6 +250,56 @@ void main() {
       expect(vue.bloqueDonneesMobiles, isTrue);
       expect(vue.etat, EtatTelechargement.telechargeable);
       // Le moteur n'a pas ete sollicite (aucun abonnement au flux).
+      expect(faux.controleur.hasListener, isFalse);
+    });
+
+    test(
+      'document premium sans abonnement : refuse localement, aucun transfert',
+      () async {
+        final faux = _FauxTelechargementRepository();
+        final container = creerContainer(faux); // connecte, pas d'abonnement
+
+        await container
+            .read(telechargementProvider.notifier)
+            .demarrer(_ressourcePremium('r1'));
+
+        final vue = container.read(vueTelechargementProvider('r1'));
+        expect(vue.etat, EtatTelechargement.telechargeable); // pas « en cours »
+        expect(faux.controleur.hasListener, isFalse); // moteur jamais sollicite
+      },
+    );
+
+    test(
+      'document premium AVEC abonnement actif : le transfert demarre',
+      () async {
+        final faux = _FauxTelechargementRepository();
+        final container = creerContainer(faux, abonnement: _abonnementActif());
+        // Attendre la premiere emission de l'abonnement (sinon la vue est null).
+        await container.read(abonnementPremiumProvider.future);
+
+        await container
+            .read(telechargementProvider.notifier)
+            .demarrer(_ressourcePremium('r1'));
+
+        expect(
+          container.read(vueTelechargementProvider('r1')).etat,
+          EtatTelechargement.enCours,
+        );
+      },
+    );
+
+    test('invite : refuse localement, aucun transfert', () async {
+      final faux = _FauxTelechargementRepository();
+      final container = creerContainer(faux, etat: const AuthInvite());
+
+      await container
+          .read(telechargementProvider.notifier)
+          .demarrer(_ressource('r1'));
+
+      expect(
+        container.read(vueTelechargementProvider('r1')).etat,
+        EtatTelechargement.telechargeable,
+      );
       expect(faux.controleur.hasListener, isFalse);
     });
   });

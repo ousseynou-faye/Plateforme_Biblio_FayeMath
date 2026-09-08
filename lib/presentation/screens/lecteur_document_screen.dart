@@ -11,6 +11,8 @@ import 'package:fayemath_academy/core/telechargement/chemins_telechargement.dart
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/etat_telechargement.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
+import 'package:fayemath_academy/domain/usecases/droit_acces_document.dart';
+import 'package:fayemath_academy/presentation/providers/abonnement_provider.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
@@ -159,13 +161,13 @@ class _LecteurDocumentScreenState extends ConsumerState<LecteurDocumentScreen> {
     }
 
     // Etat du telechargement (un asset embarque est toujours « local »). On lit
-    // aussi l'etat d'auth : un invite ne peut rien telecharger (policy Storage,
-    // migration 06) — on lui propose de creer un compte plutot qu'un bouton qui
-    // echouerait cote serveur.
+    // aussi le DROIT d'acces (etape 25) : selon le profil (invite / premium sans
+    // abonnement / ayant droit), la zone propose de creer un compte, de voir
+    // l'offre, ou le telechargement — plutot qu'un bouton qui echouerait au reseau.
     final vue = _estAsset
         ? null
         : ref.watch(vueTelechargementProvider(ressource.id));
-    final estConnecte = ref.watch(etatAuthProvider) is AuthConnecte;
+    final acces = ref.watch(accesDocumentProvider(ressource.premium));
 
     // Ouvre le PDF des que le fichier telecharge est disponible localement : le
     // controleur passe le relais de l'etat d'attente au rendu (une seule fois).
@@ -199,23 +201,24 @@ class _LecteurDocumentScreenState extends ConsumerState<LecteurDocumentScreen> {
               onZoom: _controller == null ? null : _cyclerZoom,
               partageActif: _controller != null,
             ),
-            Expanded(child: _corps(vue, estConnecte)),
+            Expanded(child: _corps(vue, acces)),
           ],
         ),
       ),
     );
   }
 
-  Widget _corps(VueTelechargement? vue, bool estConnecte) {
+  Widget _corps(VueTelechargement? vue, AccesDocument acces) {
     final controller = _controller;
     if (controller == null) {
       // Pas de PDF ouvert : on montre l'etat du telechargement (a proposer / en
-      // cours / echec), ou l'invitation a creer un compte pour un invite.
+      // cours / echec) OU, selon le droit, l'invitation a creer un compte ou a
+      // voir l'offre Premium.
       return _ZoneTelechargement(
         vue: vue ?? const VueTelechargement(),
         tailleTexte: TailleFichier.enTexte(widget.ressource.tailleOctets),
         premium: widget.ressource.premium,
-        estConnecte: estConnecte,
+        acces: acces,
         onTelecharger: () => unawaited(
           ref
               .read(telechargementProvider.notifier)
@@ -226,6 +229,9 @@ class _LecteurDocumentScreenState extends ConsumerState<LecteurDocumentScreen> {
             .annuler(widget.ressource.id),
         onCreerCompte: () =>
             ref.read(etatAuthProvider.notifier).quitterModeInvite(),
+        // « Voir l'offre » : la route + l'ecran minimal arrivent au lot F.
+        onVoirOffre: () =>
+            _bientot(context, 'L\'offre Premium arrive tres bientot.'),
       );
     }
     // Le PDF remplit la zone ; la barre basse FLOTTE au-dessus (maquette).
@@ -613,19 +619,24 @@ class _ZoneTelechargement extends StatelessWidget {
     required this.vue,
     required this.tailleTexte,
     required this.premium,
-    required this.estConnecte,
+    required this.acces,
     required this.onTelecharger,
     required this.onAnnuler,
     required this.onCreerCompte,
+    required this.onVoirOffre,
   });
 
   final VueTelechargement vue;
   final String tailleTexte;
   final bool premium;
-  final bool estConnecte;
+
+  /// Le droit d'acces (etape 25), qui choisit l'invite du bas quand aucun PDF
+  /// n'est ouvert : telecharger / creer un compte / voir l'offre.
+  final AccesDocument acces;
   final VoidCallback onTelecharger;
   final VoidCallback onAnnuler;
   final VoidCallback onCreerCompte;
+  final VoidCallback onVoirOffre;
 
   @override
   Widget build(BuildContext context) {
@@ -644,16 +655,23 @@ class _ZoneTelechargement extends StatelessWidget {
               premium: premium,
               onReessayer: onTelecharger,
             ),
-            // `local` n'arrive jamais ici (le PDF s'affiche alors) ; `telechargeable`
-            // (et le defaut) : proposer le telechargement, ou inviter a s'inscrire.
-            _ =>
-              estConnecte
-                  ? _AProposer(
-                      tailleTexte: tailleTexte,
-                      onTelecharger: onTelecharger,
-                      bloqueDonneesMobiles: vue.bloqueDonneesMobiles,
-                    )
-                  : _InviteCompte(onCreerCompte: onCreerCompte),
+            // `local` n'arrive jamais ici (le PDF s'affiche alors) ; sinon on
+            // branche selon le DROIT d'acces (etape 25) : ayant droit -> proposer
+            // le telechargement ; premium sans abonnement -> voir l'offre ;
+            // invite -> creer un compte (aucun octet consomme pour dire « non »).
+            _ => switch (acces) {
+              AccesDocument.autorise => _AProposer(
+                tailleTexte: tailleTexte,
+                onTelecharger: onTelecharger,
+                bloqueDonneesMobiles: vue.bloqueDonneesMobiles,
+              ),
+              AccesDocument.abonnementRequis => _VerrouPremium(
+                onVoirOffre: onVoirOffre,
+              ),
+              AccesDocument.compteRequis => _InviteCompte(
+                onCreerCompte: onCreerCompte,
+              ),
+            },
           },
         ),
       ),
@@ -802,6 +820,48 @@ class _InviteCompte extends StatelessWidget {
         BoutonPrimaireWidget(
           libelle: 'Creer un compte',
           onPressed: onCreerCompte,
+          pleineLargeur: false,
+        ),
+      ],
+    );
+  }
+}
+
+/// Document premium, eleve connecte SANS abonnement actif : on ne propose PAS le
+/// telechargement (aucun octet consomme), on mene a l'offre. Un document premium
+/// DEJA sur l'appareil reste lisible (decision 5.6) et n'atteint pas cette zone
+/// (son PDF s'ouvre directement).
+class _VerrouPremium extends StatelessWidget {
+  const _VerrouPremium({required this.onVoirOffre});
+
+  final VoidCallback onVoirOffre;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const _Pastille(icone: Icons.lock_outline),
+        const SizedBox(height: 14),
+        Text(
+          'Document Premium',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Ce document fait partie de l\'offre Premium. Passe a Premium pour le '
+          'telecharger et le lire hors connexion.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 16),
+        BoutonPrimaireWidget(
+          libelle: 'Voir l\'offre',
+          onPressed: onVoirOffre,
           pleineLargeur: false,
         ),
       ],
