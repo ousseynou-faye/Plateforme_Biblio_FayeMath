@@ -184,7 +184,8 @@ class _SousEntete extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final libelleChapitres = nombre == 1 ? '1 chapitre' : '$nombre chapitres';
-    final libelle = '$libelleChapitres · $termines termines';
+    final libelleTermines = termines == 1 ? '1 termine' : '$termines termines';
+    final libelle = '$libelleChapitres · $libelleTermines';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),

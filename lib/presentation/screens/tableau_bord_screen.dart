@@ -90,10 +90,12 @@ class _CarteProgression extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final pct = avancement.pourcentageGlobal;
+    final rappel = avancement.fait == 1
+        ? '1 chapitre sur ${avancement.total}'
+        : '${avancement.fait} chapitres sur ${avancement.total}';
     return Semantics(
       button: true,
-      label: 'Ma progression, $pct pour cent. '
-          '${avancement.fait} chapitres sur ${avancement.total}.',
+      label: 'Ma progression, $pct pour cent. $rappel.',
       excludeSemantics: true,
       child: Material(
         color: scheme.surface,
@@ -127,7 +129,7 @@ class _CarteProgression extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        '${avancement.fait} chapitres sur ${avancement.total}',
+                        rappel,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),

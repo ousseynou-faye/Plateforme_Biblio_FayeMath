@@ -252,8 +252,8 @@ void main() {
       },
     );
 
-    // Compteur : un seul chapitre « fait ».
-    expect(find.text('3 chapitres · 1 termines'), findsOneWidget);
+    // Compteur : un seul chapitre « fait » (accord au singulier).
+    expect(find.text('3 chapitres · 1 termine'), findsOneWidget);
 
     // Une pastille par etat visible (fait / en cours / a faire par defaut).
     expect(find.text('Fait'), findsOneWidget);

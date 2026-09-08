@@ -11,6 +11,7 @@ import 'package:fayemath_academy/domain/usecases/agregation_progression.dart';
 import 'package:fayemath_academy/presentation/providers/bibliotheque_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
+import 'package:fayemath_academy/presentation/widgets/bandeau_reseau_widget.dart';
 import 'package:fayemath_academy/presentation/widgets/statut_progression_chip.dart';
 
 /// Ecran « Ma progression » (maquette V2.1, ecran 9), etape 24 — derniere etape de
@@ -31,11 +32,21 @@ class MaProgressionScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Ma progression')),
       body: SafeArea(
-        child: switch (avancementAsync) {
-          AsyncData(:final value) => _Corps(avancement: value),
-          AsyncError() => const _EtatErreur(),
-          _ => const Center(child: CircularProgressIndicator()),
-        },
+        child: Column(
+          children: [
+            // Route racine (empilee au-dessus des onglets) : le bandeau reseau
+            // est ajoute a la main, comme le detail et le lecteur (etape 21), la
+            // coquille a onglets ne le porte pas ici.
+            const BandeauReseauWidget(),
+            Expanded(
+              child: switch (avancementAsync) {
+                AsyncData(:final value) => _Corps(avancement: value),
+                AsyncError() => const _EtatErreur(),
+                _ => const Center(child: CircularProgressIndicator()),
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -125,7 +136,9 @@ class _CarteAnneau extends StatelessWidget {
                   ),
                 const SizedBox(height: 4),
                 Text(
-                  '${avancement.fait} chapitres sur ${avancement.total}',
+                  avancement.fait == 1
+                      ? '1 chapitre sur ${avancement.total}'
+                      : '${avancement.fait} chapitres sur ${avancement.total}',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -495,7 +508,9 @@ class _BarreMatiere extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '${avancement.fait} chapitres sur ${avancement.total}',
+            avancement.fait == 1
+                ? '1 chapitre sur ${avancement.total}'
+                : '${avancement.fait} chapitres sur ${avancement.total}',
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
