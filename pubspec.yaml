@@ -85,6 +85,13 @@ dependencies:
   # lourde (memes criteres que connectivity_plus).
   uuid: ^4.5.1
 
+  # Ouverture de liens externes (etape 26, ecran de l'offre) : WhatsApp (wa.me,
+  # lien https -> pas de config native) et composition d'un numero (tel:) pour
+  # contacter le tuteur et souscrire, tant que le paiement en ligne n'existe pas
+  # (etape 27). Paquet OFFICIEL de l'equipe Flutter (flutter.dev). Ecart assume a
+  # la stack verrouillee CLAUDE.md §3, valide par Ousseynou le 08/09/2026.
+  url_launcher: ^6.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:fayemath_academy/core/errors/echecs_authentification.dart';
 import 'package:fayemath_academy/domain/entities/serie.dart';
+import 'package:fayemath_academy/presentation/providers/abonnement_provider.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/bibliotheque_provider.dart';
 import 'package:fayemath_academy/presentation/providers/choix_classe_provider.dart';
@@ -24,10 +25,9 @@ import 'package:fayemath_academy/presentation/providers/reglages_provider.dart';
 ///  - « Se deconnecter » vit desormais ICI (deplace depuis la barre du haut de la
 ///    liste des chapitres, ou il etait provisoire depuis l'etape 15).
 ///
-/// PLACEHOLDERS (ecrans non construits) : « Classe, serie et matieres » (branche a
-/// l'ecran de choix au lot C2), « Parametres et notifications », « Aide et
-/// contact » et « Decouvrir Premium » (comparatif = ecran 17, Phase 4) annoncent
-/// « bientot disponible » plutot que d'ouvrir un ecran vide ou faux.
+/// PLACEHOLDERS restants : « Aide et contact » annonce « bientot disponible »
+/// (ecran 20 non construit). « Classe, serie et matieres » ouvre l'ecran de choix
+/// (lot Qualite C2) et « Decouvrir Premium » mene a l'ecran de l'offre (etape 25/26).
 class ProfilScreen extends ConsumerWidget {
   const ProfilScreen({super.key});
 
@@ -144,6 +144,18 @@ class _CarteIdentite extends ConsumerWidget {
     final estInvite = etatAuth is AuthInvite;
     final bib = ref.watch(bibliothequeCouranteProvider).value;
 
+    // Chip d'abonnement REACTIF (etape 26, point 5.2) : 3 libelles selon l'etat.
+    // « Premium » quand un abonnement couvre le jour ([Abonnement.estActif]) ;
+    // sinon « Compte gratuit » (connecte) ou « Sans compte » (invite). Meme source
+    // que l'ecran de l'offre ([abonnementPremiumProvider]) : cache local, donc
+    // `null` hors-ligne non synchronise -> on n'affiche pas « Premium » a tort,
+    // « Compte gratuit » est le repli neutre (pas de phrase fausse).
+    final abonnement = ref.watch(abonnementPremiumProvider).value;
+    final estAbonne = abonnement != null && abonnement.estActif(DateTime.now());
+    final texteChip = estInvite
+        ? 'Sans compte'
+        : (estAbonne ? 'Premium' : 'Compte gratuit');
+
     // La serie n'est pas portee par [BibliothequeCourante] : on la lit a sa source
     // (profil serveur si connecte, choix local si invite), comme le fait deja
     // `bibliothequeCouranteProvider` pour la classe.
@@ -208,9 +220,7 @@ class _CarteIdentite extends ConsumerWidget {
                   ),
                 ],
                 const SizedBox(height: 6),
-                _Pastille(
-                  texte: estInvite ? 'Sans compte' : 'Compte gratuit',
-                ),
+                _Pastille(texte: texteChip),
               ],
             ),
           ),
@@ -400,9 +410,9 @@ class _Reglage extends StatelessWidget {
 }
 
 /// Grande carte indigo « Decouvrir Premium ». Mene a l'ecran « Voir l'offre »
-/// (ecran 17 minimal, etape 25 lot F). Son TEXTE (« de la 6e a la Terminale »)
-/// n'est pas retouche ici : sa reformulation est un point de l'etape 26 ; le lot F
-/// se contente de brancher la navigation, pas de reecrire la carte.
+/// (ecran 17 minimal, etape 25/26). Son sous-titre a ete reformule a l'etape 26
+/// (point 5.7) : plus de promesse « de la 6e a la Terminale » (seule la 6e Maths
+/// existe) -> « des matieres disponibles », vrai aujourd'hui sans enumerer de classes.
 ///
 /// Ecart assume a la maquette : degrade indigo rendu en aplat (seul l'indigo
 /// principal est un token de theme ; l'indigo clair du degrade n'est pas expose)
@@ -449,8 +459,8 @@ class _CartePremium extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Tous les corriges detailles et la bibliotheque complete, '
-                  'de la 6e a la Terminale.',
+                  'Tous les corriges, les evaluations et les sujets d\'examen '
+                  'des matieres disponibles.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onPrimary.withValues(alpha: 0.82),
                   ),

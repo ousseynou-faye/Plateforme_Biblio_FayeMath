@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'package:fayemath_academy/core/constants/contact_tuteur.dart';
 import 'package:fayemath_academy/core/theme/couleurs_marque.dart';
+import 'package:fayemath_academy/domain/entities/abonnement.dart';
+import 'package:fayemath_academy/domain/entities/formule_abonnement.dart';
+import 'package:fayemath_academy/domain/usecases/resume_abonnement.dart';
+import 'package:fayemath_academy/presentation/providers/abonnement_provider.dart';
+import 'package:fayemath_academy/presentation/providers/formule_selectionnee_provider.dart';
 import 'package:fayemath_academy/presentation/widgets/bandeau_reseau_widget.dart';
+import 'package:fayemath_academy/presentation/widgets/bouton_primaire_widget.dart';
 
 /// Ecran « Voir l'offre » (maquette V2.1, ecran 17 « Comparatif Gratuit /
 /// Premium »), version MINIMALE de l'etape 25. Atteint depuis les trois points ou
@@ -30,11 +40,23 @@ import 'package:fayemath_academy/presentation/widgets/bandeau_reseau_widget.dart
 /// coquille a onglets — on l'insere ICI a la main, comme le font le detail, le
 /// lecteur et Ma progression (etape 21). Sinon aucun avertissement hors-ligne sur
 /// cet ecran.
-class OffrePremiumScreen extends StatelessWidget {
+///
+/// Trois etats (etape 26, decision 5.1), pilotes par [abonnementPremiumProvider]
+/// + [Abonnement.estActif] :
+///  - **abonne actif** : en-tete « Premium actif » (formule + echeance), la
+///    matrice reste (elle rappelle les droits), le bloc tarif disparait ;
+///  - **connecte sans abonnement** / **invite** : l'argumentaire complet + le
+///    bloc tarif. L'abonnement vient du cache LOCAL (etape 25, point 5.3) : s'il
+///    n'a jamais ete synchronise il est `null` -> on retombe sur l'argumentaire,
+///    sans jamais ecrire une phrase qui deviendrait fausse hors-ligne.
+class OffrePremiumScreen extends ConsumerWidget {
   const OffrePremiumScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final abonnement = ref.watch(abonnementPremiumProvider).value;
+    final estAbonne = abonnement != null && abonnement.estActif(DateTime.now());
+
     return Scaffold(
       // Barre du haut = « Premium » + fleche retour automatique (l'ecran est
       // atteint depuis plusieurs endroits : le retour contextuel vaut mieux qu'un
@@ -47,19 +69,83 @@ class OffrePremiumScreen extends StatelessWidget {
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-                children: const [
-                  _Entete(),
-                  SizedBox(height: 16),
-                  _Matrice(),
-                  SizedBox(height: 14),
-                  _CalloutHorsLigne(),
-                  SizedBox(height: 16),
-                  _CarteTarifs(),
+                children: [
+                  if (estAbonne)
+                    _EnteteActif(abonnement)
+                  else
+                    const _Entete(),
+                  const SizedBox(height: 16),
+                  const _Matrice(),
+                  const SizedBox(height: 14),
+                  const _CalloutHorsLigne(),
+                  // Un abonne n'a plus rien a acheter : pas de bloc tarif, pas de
+                  // canal de souscription, pas de conditions.
+                  if (!estAbonne) ...const [
+                    SizedBox(height: 16),
+                    _CarteTarifs(),
+                    SizedBox(height: 16),
+                    _ContactTuteur(),
+                    SizedBox(height: 14),
+                    _Conditions(),
+                  ],
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// En-tete de l'etat « abonne actif » : une carte positive (coche verte NON
+/// textuelle + texte neutre) rappelant la formule et l'echeance. Remplace
+/// l'argumentaire promotionnel : un abonne n'a pas besoin qu'on lui vende Premium.
+class _EnteteActif extends StatelessWidget {
+  const _EnteteActif(this.abonnement);
+
+  final Abonnement abonnement;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final succes = theme.extension<CouleursMarque>()!.succes;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // La coche est un ornement non textuel -> le vert « succes » y est
+          // autorise (le sens reste porte par le texte a cote).
+          Icon(Icons.verified, size: 26, color: succes),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Premium actif',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  ResumeAbonnement.echeance(abonnement),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -327,12 +413,189 @@ class _CalloutHorsLigne extends StatelessWidget {
   }
 }
 
-/// La carte des tarifs (etape 25, point 5.5). Les trois formules sont verrouillees
-/// depuis le 31/07/2026 (CLAUDE.md §6). Aucun bouton d'achat : une seule ligne
-/// factuelle annonce que la souscription arrive. Fond neutre : l'ocre de marque
-/// n'est pas pose sous du texte (audit du 28/07).
-class _CarteTarifs extends StatelessWidget {
+/// Les trois montants et periodes, verrouilles le 31/07/2026 (CLAUDE.md §6). Le
+/// booleen = « a mettre en avant » (annee scolaire, document 2 tableau 4).
+const _formulesOffre = <(FormuleAbonnement, String, String, bool)>[
+  (FormuleAbonnement.mensuel, '1 000 FCFA', 'par mois', false),
+  (FormuleAbonnement.trimestriel, '2 500 FCFA', 'par trimestre', false),
+  (FormuleAbonnement.anneeScolaire, '6 000 FCFA', 'par annee scolaire', true),
+];
+
+/// La carte des tarifs (etape 26, point 5.3). Les trois formules sont
+/// SELECTIONNABLES — la selection est du pur affichage, lue par l'etape 27 via
+/// [formuleSelectionneeProvider]. « Annee scolaire » est presel. par defaut (la
+/// formule a mettre en avant). Toujours AUCUN bouton d'achat : le choix ne
+/// declenche rien ici. Fond neutre : l'ocre de marque n'est pas pose sous du texte.
+class _CarteTarifs extends ConsumerWidget {
   const _CarteTarifs();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final selection = ref.watch(formuleSelectionneeProvider);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Choisis ta formule',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final (formule, montant, periode, recommande) in _formulesOffre)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _FormuleSelectionnable(
+                montant: montant,
+                periode: periode,
+                recommande: recommande,
+                selectionne: formule == selection,
+                onTap: () => ref
+                    .read(formuleSelectionneeProvider.notifier)
+                    .choisir(formule),
+              ),
+            ),
+          const SizedBox(height: 4),
+          Text(
+            'Offert aux eleves inscrits au tutorat a domicile — demande a ton '
+            'tuteur.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Une formule choisissable : indicateur radio (la forme, pas la seule couleur —
+/// SPEC §6.2) + montant + periode, et un liosere « Recommande » pour l'annee
+/// scolaire. Cible tactile >= 48 px ; l'etat selectionne est aussi porte par la
+/// semantique (`selected`).
+class _FormuleSelectionnable extends StatelessWidget {
+  const _FormuleSelectionnable({
+    required this.montant,
+    required this.periode,
+    required this.recommande,
+    required this.selectionne,
+    required this.onTap,
+  });
+
+  final String montant;
+  final String periode;
+  final bool recommande;
+  final bool selectionne;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Semantics(
+      button: true,
+      selected: selectionne,
+      label: '$montant $periode'
+          '${recommande ? ', recommande' : ''}',
+      excludeSemantics: true,
+      child: Material(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 52),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: selectionne ? scheme.primary : scheme.outlineVariant,
+                width: selectionne ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  selectionne
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  size: 20,
+                  color: selectionne ? scheme.primary : scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  montant,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    periode,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                if (recommande)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Recommande',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Le canal de souscription (etape 26, point 5.4) tant que le paiement en ligne
+/// n'existe pas (etape 27) : ecrire au tuteur sur WhatsApp, ou l'appeler. Les
+/// numeros sont AFFICHES en clair (repli hors-ligne : meme si l'ouverture echoue,
+/// l'eleve les lit) et proviennent d'une source UNIQUE ([ContactTuteur]).
+class _ContactTuteur extends StatelessWidget {
+  const _ContactTuteur();
+
+  Future<void> _ouvrir(BuildContext context, Uri lien, String replSnack) async {
+    try {
+      final ok = await launchUrl(lien, mode: LaunchMode.externalApplication);
+      if (!ok && context.mounted) _snack(context, replSnack);
+    } on Exception {
+      if (context.mounted) _snack(context, replSnack);
+    }
+  }
+
+  void _snack(BuildContext context, String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -349,68 +612,165 @@ class _CarteTarifs extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Tarif',
+            'Passer a Premium',
             style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 12),
-          const _Formule(montant: '1 000 FCFA', periode: 'par mois'),
-          const SizedBox(height: 8),
-          const _Formule(montant: '2 500 FCFA', periode: 'par trimestre'),
-          const SizedBox(height: 8),
-          const _Formule(montant: '6 000 FCFA', periode: 'par annee scolaire'),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           Text(
-            'Offert aux eleves inscrits au tutorat a domicile.',
+            'Le paiement en ligne arrive bientot. En attendant, ecris ou appelle '
+            'ton tuteur pour activer Premium.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 12),
-          Divider(height: 1, color: scheme.outlineVariant),
-          const SizedBox(height: 12),
+          BoutonPrimaireWidget(
+            libelle: 'Ecrire au tuteur (WhatsApp)',
+            icone: Icons.chat_outlined,
+            onPressed: () => _ouvrir(
+              context,
+              ContactTuteur.whatsApp,
+              'Impossible d\'ouvrir WhatsApp. Appelle le '
+                  '${ContactTuteur.numeros.first.affichage}.',
+            ),
+          ),
+          const SizedBox(height: 10),
           Text(
-            'La souscription sera disponible prochainement. Aucun paiement n\'est '
-            'possible pour le moment.',
+            'ou appelle :',
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
           ),
+          const SizedBox(height: 4),
+          for (final numero in ContactTuteur.numeros)
+            _LigneAppel(
+              affichage: numero.affichage,
+              onTap: () => _ouvrir(
+                context,
+                ContactTuteur.appel(numero.e164),
+                'Impossible d\'ouvrir le clavier d\'appel. Compose le '
+                    '${numero.affichage}.',
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-/// Une ligne de tarif : le montant (en avant) + la periode.
-class _Formule extends StatelessWidget {
-  const _Formule({required this.montant, required this.periode});
+/// Un numero appelable : icone + numero, cible tactile >= 48 px. Le numero reste
+/// LISIBLE meme si l'appel ne peut pas s'ouvrir (repli hors-ligne).
+class _LigneAppel extends StatelessWidget {
+  const _LigneAppel({required this.affichage, required this.onTap});
 
-  final String montant;
-  final String periode;
+  final String affichage;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
-      children: [
-        Text(
-          montant,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
+    final scheme = theme.colorScheme;
+    return Semantics(
+      button: true,
+      label: 'Appeler le $affichage',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Row(
+            children: [
+              Icon(Icons.call_outlined, size: 18, color: scheme.primary),
+              const SizedBox(width: 10),
+              Text(
+                affichage,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            periode,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
+/// Les conditions (etape 26, point 5.5) : quatre phrases factuelles, pas un
+/// contrat. Elles evitent toute promesse fausse et repondent explicitement a la
+/// « restauration d'achat » (le 4e point : l'abonnement suit le compte).
+class _Conditions extends StatelessWidget {
+  const _Conditions();
+
+  static const _lignes = <(String, String)>[
+    (
+      'Duree',
+      'L\'abonnement couvre la periode que tu choisis, sans reconduction '
+          'automatique.',
+    ),
+    (
+      'A l\'echeance',
+      'L\'acces aux documents premium s\'arrete, mais les documents deja '
+          'telecharges restent lisibles.',
+    ),
+    (
+      'Aucun prelevement recurrent',
+      'Le paiement est ponctuel : il n\'y a rien a resilier.',
+    ),
+    (
+      'Changement de telephone',
+      'Ton abonnement est attache a ton compte, pas a l\'appareil : il suffit '
+          'de te reconnecter.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Conditions',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
             ),
           ),
-        ),
-      ],
+          const SizedBox(height: 10),
+          for (final (titre, texte) in _lignes)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    titre,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    texte,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

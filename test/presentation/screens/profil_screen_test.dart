@@ -10,8 +10,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:fayemath_academy/core/theme/theme.dart';
+import 'package:fayemath_academy/domain/entities/abonnement.dart';
 import 'package:fayemath_academy/domain/entities/classe.dart';
 import 'package:fayemath_academy/domain/entities/cycle.dart';
+import 'package:fayemath_academy/domain/entities/formule_abonnement.dart';
 import 'package:fayemath_academy/domain/entities/matiere.dart';
 import 'package:fayemath_academy/domain/entities/serie.dart';
 import 'package:fayemath_academy/domain/entities/session_auth.dart';
@@ -20,6 +22,7 @@ import 'package:fayemath_academy/domain/repositories/auth_repository.dart';
 import 'package:fayemath_academy/domain/repositories/catalogue_repository.dart';
 import 'package:fayemath_academy/domain/repositories/preferences_reglages_repository.dart';
 import 'package:fayemath_academy/domain/repositories/profil_repository.dart';
+import 'package:fayemath_academy/presentation/providers/abonnement_provider.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/catalogue_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
@@ -114,6 +117,7 @@ const _classe6e = Classe(id: 'c-6e', nom: '6e', cycle: Cycle.college, ordre: 1);
 Future<_FauxAuthRepository> _monter(
   WidgetTester tester, {
   required bool connecte,
+  Abonnement? abonnement,
 }) async {
   // Surface haute : l'ecran Profil (ListView) tient en entier, tous ses elements
   // sont construits (« Se deconnecter » est en bas et ne serait sinon pas rendu
@@ -144,6 +148,7 @@ Future<_FauxAuthRepository> _monter(
                 : null,
           ),
         ),
+        abonnementPremiumProvider.overrideWith((ref) => Stream.value(abonnement)),
       ],
       child: MaterialApp(
         theme: ThemeApplication.clair,
@@ -154,6 +159,15 @@ Future<_FauxAuthRepository> _monter(
   await tester.pumpAndSettle();
   return auth;
 }
+
+Abonnement _abonnementActif() => Abonnement(
+  id: 'a1',
+  utilisateurId: 'u1',
+  formule: FormuleAbonnement.anneeScolaire,
+  dateDebut: DateTime(2026, 9, 1),
+  dateFin: DateTime(2027, 6, 30),
+  referencePaiement: null,
+);
 
 /// Monte le Profil dans un vrai routeur, pour prouver que « Decouvrir Premium »
 /// mene a l'ecran « Voir l'offre » (ecran 17 minimal, etape 25 lot F). La route
@@ -194,6 +208,7 @@ Future<void> _monterAvecRouteur(WidgetTester tester) async {
             ),
           ),
         ),
+        abonnementPremiumProvider.overrideWith((ref) => Stream.value(null)),
       ],
       child: MaterialApp.router(
         theme: ThemeApplication.clair,
@@ -228,6 +243,15 @@ void main() {
 
     // La deconnexion vit desormais ici.
     expect(find.text('Se deconnecter'), findsOneWidget);
+  });
+
+  testWidgets('chip « Premium » quand un abonnement actif (etape 26 lot B)', (
+    tester,
+  ) async {
+    await _monter(tester, connecte: true, abonnement: _abonnementActif());
+
+    expect(find.text('Premium'), findsOneWidget);
+    expect(find.text('Compte gratuit'), findsNothing);
   });
 
   testWidgets('connecte : « Se deconnecter » declenche seDeconnecter', (
