@@ -4,10 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:fayemath_academy/core/format/taille_fichier.dart';
+import 'package:fayemath_academy/core/theme/couleurs_marque.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/etat_progression.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/domain/entities/type_ressource.dart';
+import 'package:fayemath_academy/domain/usecases/droit_acces_document.dart';
+import 'package:fayemath_academy/presentation/providers/abonnement_provider.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
@@ -25,11 +28,13 @@ import 'package:fayemath_academy/presentation/widgets/statut_progression_chip.da
 /// 4 etats — modifiable meme hors-ligne (ecriture locale d'abord). Pour un invite
 /// (progression liee au compte), « Modifier » invite a creer un compte.
 ///
-/// Perimetre volontairement reduit (valide avec Ousseynou, etape 16) :
-///  - la ligne d'un document n'affiche PAS d'etat de telechargement : les 8 etats
-///    de SPEC §2.4 supposent un moteur de telechargement / une detection reseau
-///    inexistants. On AFFICHE, on ne telecharge pas (etape 17 / Phase 3) ; le tap
-///    reste un placeholder, comme la ligne de chapitre a l'etape 15.
+/// La ligne d'un document n'affiche PAS d'etat de telechargement (decision etape
+/// 16, toujours en vigueur : ni « a telecharger », ni « en cours »...) — seulement
+/// type + taille + badge. Depuis l'etape 25 elle porte en plus le VERROU premium :
+/// selon le droit d'acces (invite / connecte sans abonnement / abonne), le tap
+/// ouvre le lecteur (ecran 7), invite a creer un compte, ou mene a « Voir l'offre »
+/// (cf. [_LigneDocument]). Le verrou est cote application EN PLUS du garde-fou
+/// serveur (policy Storage) : aucun octet n'est consomme pour dire « non ».
 ///
 /// Depuis l'etape 21, un [BandeauReseauWidget] coiffe l'ecran (SPEC §2.2 : bandeau
 /// haut de CHAQUE ecran de contenu) — distinct de la disponibilite d'un document.
@@ -274,26 +279,44 @@ class _TitreSection extends StatelessWidget {
   }
 }
 
-/// Une ligne de document : icone du type, libelle, taille, badge gratuit/premium.
-/// Vrai bouton accessible (>= 48 px, Semantics). Le tap OUVRE le lecteur (ecran 7,
-/// etape 17) via une navigation imperative (`pushNamed('document', ...)`).
-class _LigneDocument extends StatelessWidget {
+/// Une ligne de document : icone du type, libelle, taille, badge gratuit/premium,
+/// et — selon le DROIT d'acces (etape 25) — un chevron (ouvrable) ou un cadenas
+/// (verrouille). Le droit vient de [accesDocumentProvider] (auth x abonnement x
+/// `premium`), jamais recalcule ici. Vrai bouton accessible (>= 48 px), dont le
+/// `Semantics` annonce le verrou et l'action possible.
+///
+/// Le tap depend du droit :
+///  - [AccesDocument.autorise]         -> ouvre le lecteur (ecran 7) ;
+///  - [AccesDocument.compteRequis]     -> invite a creer un compte (un invite ne
+///    peut rien telecharger, policy Storage `to authenticated`) ;
+///  - [AccesDocument.abonnementRequis] -> « Voir l'offre ». La route + l'ecran
+///    minimal de l'offre arrivent au lot F ; d'ici la, un message clair (aucun
+///    octet consomme, aucun lecteur ouvert).
+///
+/// Le badge Gratuit/Premium est CONSERVE : il decrit la RESSOURCE (les droits sont
+/// visibles sur chaque document, SPEC §8.2). Le DROIT de l'eleve s'exprime a part,
+/// par l'icone d'action en bout de ligne (decision 5.8).
+class _LigneDocument extends ConsumerWidget {
   const _LigneDocument({required this.ressource, required this.chapitre});
 
   final Ressource ressource;
   final Chapitre chapitre;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final reduireMouvement = MediaQuery.of(context).disableAnimations;
     final taille = TailleFichier.enTexte(ressource.tailleOctets);
     final statut = ressource.premium ? 'Premium' : 'Gratuit';
+    final acces = ref.watch(accesDocumentProvider(ressource.premium));
+    final verrouille = acces != AccesDocument.autorise;
 
     return Semantics(
       button: true,
-      label: '${ressource.type.libelleAffichage}, $taille, $statut',
+      label:
+          '${ressource.type.libelleAffichage}, $taille, $statut, '
+          '${_actionSemantique(acces)}',
       excludeSemantics: true,
       child: Padding(
         padding: const EdgeInsets.only(bottom: 8),
@@ -306,20 +329,7 @@ class _LigneDocument extends StatelessWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(11),
             splashFactory: reduireMouvement ? NoSplash.splashFactory : null,
-            // Ouvre le lecteur (ecran 7). On EMPILE l'ecran pour que « retour »
-            // revienne au detail. La Ressource ET le Chapitre (deja charges)
-            // voyagent ENSEMBLE en `extra` (record) ; les id vont en parametres
-            // de route (URL /chapitre/<id>/document/<id>). Le nom « document » est
-            // defini dans routing/ (nomRouteDocument) ; `presentation/` ne peut
-            // pas importer `routing/` (ARCHITECTURE §3), d'ou le litteral.
-            onTap: () => context.pushNamed(
-              'document',
-              pathParameters: {
-                'chapitreId': chapitre.id,
-                'ressourceId': ressource.id,
-              },
-              extra: (ressource: ressource, chapitre: chapitre),
-            ),
+            onTap: () => _ouvrir(context, ref, acces),
             child: Container(
               constraints: const BoxConstraints(minHeight: 64),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
@@ -349,10 +359,18 @@ class _LigneDocument extends StatelessWidget {
                   const SizedBox(width: 8),
                   BadgePremiumWidget(premium: ressource.premium),
                   const SizedBox(width: 4),
-                  Icon(
-                    Icons.chevron_right,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                  // Chevron si ouvrable, cadenas ocre si verrouille (SPEC §2.4).
+                  verrouille
+                      ? Icon(
+                          Icons.lock_outline,
+                          color: theme
+                              .extension<CouleursMarque>()!
+                              .ocreDecoratif,
+                        )
+                      : Icon(
+                          Icons.chevron_right,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                 ],
               ),
             ),
@@ -360,6 +378,55 @@ class _LigneDocument extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Le fragment de libelle lu par un lecteur d'ecran apres « type, taille,
+  /// statut » : il annonce le verrou et ce que le tap fera (SPEC §6.2).
+  static String _actionSemantique(AccesDocument acces) => switch (acces) {
+    AccesDocument.autorise => 'ouvrir',
+    AccesDocument.compteRequis => 'verrouille, cree un compte pour ouvrir',
+    AccesDocument.abonnementRequis => 'verrouille, voir l\'offre',
+  };
+
+  void _ouvrir(BuildContext context, WidgetRef ref, AccesDocument acces) {
+    switch (acces) {
+      case AccesDocument.autorise:
+        // Ouvre le lecteur (ecran 7). On EMPILE l'ecran pour que « retour »
+        // revienne au detail. La Ressource ET le Chapitre (deja charges) voyagent
+        // ENSEMBLE en `extra` (record) ; les id vont en parametres de route. Le
+        // nom « document » est defini dans routing/ ; `presentation/` ne peut pas
+        // importer `routing/` (ARCHITECTURE §3), d'ou le litteral.
+        context.pushNamed(
+          'document',
+          pathParameters: {
+            'chapitreId': chapitre.id,
+            'ressourceId': ressource.id,
+          },
+          extra: (ressource: ressource, chapitre: chapitre),
+        );
+      case AccesDocument.compteRequis:
+        // Un invite ne peut rien telecharger : on lui propose de creer un compte
+        // plutot qu'une action sans effet. « Creer un compte » quitte le mode
+        // invite -> la redirection go_router mene a l'authentification.
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: const Text('Cree un compte pour ouvrir ce document.'),
+              action: SnackBarAction(
+                label: 'Creer un compte',
+                onPressed: () =>
+                    ref.read(etatAuthProvider.notifier).quitterModeInvite(),
+              ),
+            ),
+          );
+      case AccesDocument.abonnementRequis:
+        // « Voir l'offre » : la route + l'ecran minimal arrivent au lot F.
+        _afficherMessage(
+          context,
+          'Ce document fait partie de l\'offre Premium.',
+        );
+    }
   }
 }
 

@@ -9,14 +9,18 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fayemath_academy/core/network/etat_reseau.dart';
 import 'package:fayemath_academy/core/theme/theme.dart';
+import 'package:fayemath_academy/domain/entities/abonnement.dart';
 import 'package:fayemath_academy/domain/entities/chapitre.dart';
 import 'package:fayemath_academy/domain/entities/etat_progression.dart';
+import 'package:fayemath_academy/domain/entities/formule_abonnement.dart';
 import 'package:fayemath_academy/domain/entities/ressource.dart';
 import 'package:fayemath_academy/domain/entities/session_auth.dart';
 import 'package:fayemath_academy/domain/entities/type_ressource.dart';
+import 'package:fayemath_academy/domain/repositories/abonnement_repository.dart';
 import 'package:fayemath_academy/domain/repositories/auth_repository.dart';
 import 'package:fayemath_academy/domain/repositories/progression_repository.dart';
 import 'package:fayemath_academy/domain/repositories/ressource_repository.dart';
+import 'package:fayemath_academy/presentation/providers/abonnement_provider.dart';
 import 'package:fayemath_academy/presentation/providers/auth_provider.dart';
 import 'package:fayemath_academy/presentation/providers/etat_reseau_provider.dart';
 import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
@@ -65,6 +69,17 @@ class _FauxAuthRepository implements AuthRepository {
   }) async {}
   @override
   Future<void> definirNouveauMotDePasse({required String motDePasse}) async {}
+}
+
+/// Faux repository d'abonnement : renvoie l'abonnement fourni (ou null).
+class _FauxAbonnementRepository implements AbonnementRepository {
+  _FauxAbonnementRepository(this.abonnement);
+
+  final Abonnement? abonnement;
+
+  @override
+  Stream<Abonnement?> observerAbonnement(String utilisateurId) =>
+      Stream.value(abonnement);
 }
 
 /// Faux suivi de progression, avec mouchard sur la derniere ecriture.
@@ -135,6 +150,7 @@ Future<void> _monter(
   required List<Ressource> ressources,
   SessionAuth? session = const SessionAuth(utilisateurId: 'u1'),
   _FauxProgressionRepository? progression,
+  Abonnement? abonnement,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -150,6 +166,9 @@ Future<void> _monter(
         ),
         progressionRepositoryProvider.overrideWithValue(
           progression ?? _FauxProgressionRepository(),
+        ),
+        abonnementRepositoryProvider.overrideWithValue(
+          _FauxAbonnementRepository(abonnement),
         ),
       ],
       child: MaterialApp(
@@ -299,4 +318,78 @@ void main() {
       expect(progression.dernierEtatEcrit, isNull);
     },
   );
+
+  // --- Etape 25 : verrouillage premium -----------------------------------------
+
+  Ressource cours() =>
+      _doc(type: TypeRessource.cours, octets: 168 * 1024, premium: false, ordre: 1);
+  Ressource corrige() => _doc(
+    type: TypeRessource.corrige,
+    octets: 194 * 1024,
+    premium: true,
+    ordre: 2,
+  );
+
+  Abonnement abonnementActif() => Abonnement(
+    id: 'a1',
+    utilisateurId: 'u1',
+    formule: FormuleAbonnement.mensuel,
+    dateDebut: DateTime(2026, 1, 1),
+    dateFin: DateTime.now().add(const Duration(days: 30)),
+    referencePaiement: null,
+  );
+
+  testWidgets(
+    'connecte sans abonnement : premium verrouille (Voir l\'offre), gratuit ouvrable',
+    (tester) async {
+      final handle = tester.ensureSemantics();
+      await _monter(tester, ressources: [cours(), corrige()]);
+
+      // Le cours gratuit est ouvrable ; le corrige premium est verrouille.
+      expect(find.bySemanticsLabel(RegExp(r'Cours,.*ouvrir')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp(r"voir l'offre")), findsOneWidget);
+
+      // Taper le corrige premium n'ouvre PAS le lecteur : message « offre Premium ».
+      await tester.tap(find.text('Corrige detaille'));
+      await tester.pump();
+      expect(
+        find.text('Ce document fait partie de l\'offre Premium.'),
+        findsOneWidget,
+      );
+      handle.dispose();
+    },
+  );
+
+  testWidgets(
+    'connecte AVEC abonnement actif : le corrige premium devient ouvrable',
+    (tester) async {
+      final handle = tester.ensureSemantics();
+      await _monter(
+        tester,
+        ressources: [corrige()],
+        abonnement: abonnementActif(),
+      );
+
+      expect(
+        find.bySemanticsLabel(RegExp(r'Corrige detaille,.*ouvrir')),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel(RegExp(r"voir l'offre")), findsNothing);
+      handle.dispose();
+    },
+  );
+
+  testWidgets('invite : meme le gratuit est verrouille -> creer un compte', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await _monter(tester, ressources: [cours()], session: null);
+
+    expect(find.bySemanticsLabel(RegExp('cree un compte')), findsOneWidget);
+
+    await tester.tap(find.text('Cours'));
+    await tester.pump();
+    expect(find.text('Cree un compte pour ouvrir ce document.'), findsOneWidget);
+    handle.dispose();
+  });
 }
