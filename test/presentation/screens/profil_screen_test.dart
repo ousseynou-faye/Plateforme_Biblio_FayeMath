@@ -294,6 +294,8 @@ void main() {
     expect(find.text('Mode invite'), findsOneWidget);
     expect(find.text('Sans compte'), findsOneWidget);
     expect(find.text('Se deconnecter'), findsNothing);
+    // Un invite n'a pas de compte serveur : pas de suppression proposee.
+    expect(find.text('Supprimer mon compte'), findsNothing);
 
     final quitter = find.text('Quitter le mode invite');
     expect(quitter, findsOneWidget);
@@ -315,4 +317,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('ECRAN_OFFRE_SENTINELLE'), findsOneWidget);
   });
+
+  testWidgets(
+    'connecte : « Supprimer mon compte » ouvre une DOUBLE confirmation',
+    (tester) async {
+      await _monter(tester, connecte: true);
+
+      // L'element existe (pour un compte connecte).
+      expect(find.text('Supprimer mon compte'), findsOneWidget);
+
+      // 1re confirmation : rappelle le caractere irreversible.
+      await tester.tap(find.text('Supprimer mon compte'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('irreversible'), findsOneWidget);
+
+      // 2e confirmation apres « Continuer » : dernier verrou explicite. On ne
+      // tape PAS « Supprimer definitivement » ici (l'execution reelle est prouvee
+      // par le test d'orchestrateur + la DoD appareil).
+      await tester.tap(find.text('Continuer'));
+      await tester.pumpAndSettle();
+      expect(find.text('Supprimer definitivement'), findsOneWidget);
+      expect(find.textContaining('ne pourront pas etre recuperes'), findsOneWidget);
+    },
+  );
 }

@@ -12,6 +12,7 @@ import 'package:fayemath_academy/presentation/providers/choix_classe_provider.da
 import 'package:fayemath_academy/presentation/providers/modification_classe_provider.dart';
 import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 import 'package:fayemath_academy/presentation/providers/reglages_provider.dart';
+import 'package:fayemath_academy/presentation/providers/suppression_compte_provider.dart';
 
 /// Onglet « Profil » de la barre du bas (maquette V2.1, ecran 10 « Profil et
 /// abonnement »), lot Qualite C. Remplace le placeholder de l'etape 20.
@@ -74,6 +75,17 @@ class ProfilScreen extends ConsumerWidget {
               estInvite: estInvite,
               onDeconnecter: () => _deconnecter(ref),
             ),
+            // Suppression de compte (droit a l'effacement, loi 2008-12 + exigence
+            // Google Play, etape 29). Seulement pour un compte CONNECTE : un invite
+            // n'a pas de compte serveur a supprimer (il quitte le mode invite).
+            // Ecart assume a la maquette : cet element n'existe dans aucun ecran V2
+            // (posterieur au cadrage), ajoute dans le style destructif existant.
+            if (!estInvite) ...[
+              const SizedBox(height: 14),
+              _CarteSupprimerCompte(
+                onSupprimer: () => _supprimerMonCompte(context, ref),
+              ),
+            ],
             const SizedBox(height: 14),
             Text(
               'FayeMath Academy · version de demonstration',
@@ -103,6 +115,87 @@ class ProfilScreen extends ConsumerWidget {
       await ref.read(authRepositoryProvider).seDeconnecter();
     } on EchecAuthentification {
       // La deconnexion locale suit de toute facon ; rien a afficher ici.
+    }
+  }
+
+  /// Supprime le compte apres DOUBLE confirmation (geste irreversible). En cas de
+  /// succes, `supprimerMonCompte` ferme la session -> le flux d'auth bascule et la
+  /// redirection go_router ramene a l'ecran d'authentification ; on ferme juste
+  /// l'indicateur. Un echec serveur (reseau) laisse le compte intact : message
+  /// neutre, l'eleve garde son acces.
+  Future<void> _supprimerMonCompte(BuildContext context, WidgetRef ref) async {
+    final scheme = Theme.of(context).colorScheme;
+
+    // 1re confirmation : dit CE QUI est efface.
+    final premier = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer mon compte ?'),
+        content: const Text(
+          'Cela efface DEFINITIVEMENT ton compte, ta progression, tes documents '
+          'telecharges et ton abonnement. Cette action est irreversible.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continuer'),
+          ),
+        ],
+      ),
+    );
+    if (premier != true || !context.mounted) return;
+
+    // 2e confirmation : dernier verrou avant l'action.
+    final second = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmer la suppression'),
+        content: const Text(
+          'Es-tu sur ? Ton compte et toutes tes donnees seront effaces et ne '
+          'pourront pas etre recuperes.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: scheme.error),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Supprimer definitivement'),
+          ),
+        ],
+      ),
+    );
+    if (second != true || !context.mounted) return;
+
+    // Indicateur bloquant pendant l'appel serveur + la purge locale.
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      await ref.read(suppressionCompteProvider).executer();
+      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+    } on EchecAuthentification {
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // ferme l'indicateur
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Suppression impossible pour le moment. Verifie ta connexion et '
+              'reessaie.',
+            ),
+          ),
+        );
     }
   }
 }
@@ -537,6 +630,68 @@ class _CarteDeconnexion extends StatelessWidget {
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: scheme.error,
                     ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// La carte « Supprimer mon compte » (destructive, rouge). Distincte de la
+/// deconnexion : icone `delete_forever` + sous-ligne qui rappelle le caractere
+/// definitif. Le tap ouvre une DOUBLE confirmation (voir `_supprimerMonCompte`).
+class _CarteSupprimerCompte extends StatelessWidget {
+  const _CarteSupprimerCompte({required this.onSupprimer});
+
+  final VoidCallback onSupprimer;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: InkWell(
+        onTap: onSupprimer,
+        child: Semantics(
+          button: true,
+          label: 'Supprimer mon compte',
+          excludeSemantics: true,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 52),
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+            child: Row(
+              children: [
+                Icon(Icons.delete_forever, size: 20, color: scheme.error),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Supprimer mon compte',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.error,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Efface definitivement ton compte et tes donnees.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
