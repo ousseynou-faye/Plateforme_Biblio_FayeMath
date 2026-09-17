@@ -70,4 +70,16 @@ abstract interface class AuthRepository {
   /// `EchecAuthentificationInattendu` (dont l'absence de session de recuperation,
   /// cas normalement empeche par l'ordre des ecrans cote presentation).
   Future<void> definirNouveauMotDePasse({required String motDePasse});
+
+  /// Supprime DEFINITIVEMENT le compte de l'eleve connecte (droit a l'effacement,
+  /// loi 2008-12 + exigence Google Play).
+  ///
+  /// Appelle la fonction serveur `supprimer_mon_compte` (security definer,
+  /// migration 10) qui efface `auth.users` de l'appelant -> cascade
+  /// (utilisateur, progression, telechargement, abonnement) ; puis FERME la
+  /// session. Le nettoyage des donnees LOCALES de l'appareil (cache Drift, PDF
+  /// telecharges) est un autre geste, orchestre a part (voir
+  /// `NettoyageLocalRepository`). Echecs possibles : `PanneReseau`,
+  /// `EchecAuthentificationInattendu`.
+  Future<void> supprimerMonCompte();
 }

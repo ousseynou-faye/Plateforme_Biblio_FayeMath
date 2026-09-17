@@ -104,6 +104,9 @@ class _FauxAuthRepository implements AuthRepository {
   }) async {}
   @override
   Future<void> definirNouveauMotDePasse({required String motDePasse}) async {}
+
+  @override
+  Future<void> supprimerMonCompte() async {}
 }
 
 const _maths = Matiere(id: 'm-maths', nom: 'Mathématiques');

@@ -12,9 +12,13 @@ import 'package:fayemath_academy/domain/repositories/auth_repository.dart';
 /// traduite en `EchecAuthentification` avant de remonter (docs/CONVENTIONS.md
 /// §5). La couche `presentation/` ne voit jamais une `AuthException` brute.
 class AuthRepositorySupabase implements AuthRepository {
-  AuthRepositorySupabase(this._auth);
+  AuthRepositorySupabase(this._client);
 
-  final GoTrueClient _auth;
+  final SupabaseClient _client;
+
+  /// Sous-client d'authentification. Les methodes d'auth passent par lui ;
+  /// `supprimerMonCompte` a en plus besoin du client complet pour l'appel RPC.
+  GoTrueClient get _auth => _client.auth;
 
   @override
   SessionAuth? get sessionCourante => _versSessionAuth(_auth.currentSession);
@@ -78,6 +82,19 @@ class AuthRepositorySupabase implements AuthRepository {
     await _proteger(
       () => _auth.updateUser(UserAttributes(password: motDePasse)),
     );
+  }
+
+  @override
+  Future<void> supprimerMonCompte() async {
+    await _proteger(() async {
+      // 1) Suppression cote serveur : la fonction security definer (migration 10)
+      // supprime auth.users de l'appelant (auth.uid()) -> cascade migration 01
+      // (utilisateur, progression, telechargement, abonnement). Aucun
+      // service_role cote app : c'est l'eleve CONNECTE qui appelle.
+      await _client.rpc('supprimer_mon_compte');
+      // 2) Le compte n'existe plus : on ferme la session (jeton local efface).
+      await _auth.signOut();
+    });
   }
 
   /// Enveloppe un appel Supabase : toute erreur technique est traduite en

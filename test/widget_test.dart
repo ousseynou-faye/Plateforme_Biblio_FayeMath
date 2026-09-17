@@ -78,6 +78,9 @@ class _FauxAuthRepository implements AuthRepository {
   }) async {}
   @override
   Future<void> definirNouveauMotDePasse({required String motDePasse}) async {}
+
+  @override
+  Future<void> supprimerMonCompte() async {}
 }
 
 /// Faux catalogue en memoire.

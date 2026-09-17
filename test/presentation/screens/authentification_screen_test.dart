@@ -36,6 +36,9 @@ class _FauxAuthRepository implements AuthRepository {
   }) async {}
   @override
   Future<void> definirNouveauMotDePasse({required String motDePasse}) async {}
+
+  @override
+  Future<void> supprimerMonCompte() async {}
 }
 
 Future<void> monterEcran(WidgetTester tester) async {

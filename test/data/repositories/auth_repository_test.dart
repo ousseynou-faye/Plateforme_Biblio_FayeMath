@@ -39,6 +39,23 @@ class _FauxGoTrue implements GoTrueClient {
   }
 }
 
+/// Faux `SupabaseClient` : le repository prend desormais le client COMPLET (il a
+/// besoin de `rpc` pour supprimer un compte) et derive `client.auth` en interne.
+/// Ce faux n'expose que `auth` (le sous-client teste ici) ; le reste passe par
+/// `noSuchMethod`. `rpc` n'est pas cable : la suppression de compte est prouvee
+/// cote serveur (test SQL etape 29) et via l'orchestrateur, pas ici.
+class _FauxSupabase implements SupabaseClient {
+  _FauxSupabase(this._goTrue);
+
+  final GoTrueClient _goTrue;
+
+  @override
+  GoTrueClient get auth => _goTrue;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   group('traduireEchecAuth (point de traduction)', () {
     test('code invalid_credentials -> IdentifiantsInvalides', () {
@@ -153,7 +170,7 @@ void main() {
       'sInscrire delegue a signUp et n\'echoue pas quand tout va bien',
       () async {
         final faux = _FauxGoTrue();
-        final repo = AuthRepositorySupabase(faux);
+        final repo = AuthRepositorySupabase(_FauxSupabase(faux));
 
         await repo.sInscrire(
           email: 'awa@example.com',
@@ -174,7 +191,7 @@ void main() {
             code: 'invalid_credentials',
           ),
         );
-        final repo = AuthRepositorySupabase(faux);
+        final repo = AuthRepositorySupabase(_FauxSupabase(faux));
 
         await expectLater(
           repo.seConnecter(email: 'awa@example.com', motDePasse: 'faux'),
@@ -185,7 +202,7 @@ void main() {
 
     test('seDeconnecter delegue a signOut', () async {
       final faux = _FauxGoTrue();
-      final repo = AuthRepositorySupabase(faux);
+      final repo = AuthRepositorySupabase(_FauxSupabase(faux));
 
       await repo.seDeconnecter();
 
@@ -194,7 +211,7 @@ void main() {
 
     test('demanderReinitialisation delegue a resetPasswordForEmail', () async {
       final faux = _FauxGoTrue();
-      final repo = AuthRepositorySupabase(faux);
+      final repo = AuthRepositorySupabase(_FauxSupabase(faux));
 
       await repo.demanderReinitialisation(email: 'awa@example.com');
 
@@ -203,7 +220,7 @@ void main() {
 
     test('verifierCodeReinitialisation delegue a verifyOTP', () async {
       final faux = _FauxGoTrue();
-      final repo = AuthRepositorySupabase(faux);
+      final repo = AuthRepositorySupabase(_FauxSupabase(faux));
 
       await repo.verifierCodeReinitialisation(
         email: 'awa@example.com',
@@ -221,7 +238,7 @@ void main() {
           code: 'otp_expired',
         ),
       );
-      final repo = AuthRepositorySupabase(faux);
+      final repo = AuthRepositorySupabase(_FauxSupabase(faux));
 
       await expectLater(
         repo.verifierCodeReinitialisation(
@@ -234,7 +251,7 @@ void main() {
 
     test('definirNouveauMotDePasse delegue a updateUser', () async {
       final faux = _FauxGoTrue();
-      final repo = AuthRepositorySupabase(faux);
+      final repo = AuthRepositorySupabase(_FauxSupabase(faux));
 
       await repo.definirNouveauMotDePasse(motDePasse: 'nouveaumdp1');
 

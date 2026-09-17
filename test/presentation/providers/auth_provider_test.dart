@@ -55,6 +55,9 @@ class _FauxAuthRepository implements AuthRepository {
   @override
   Future<void> definirNouveauMotDePasse({required String motDePasse}) async {}
 
+  @override
+  Future<void> supprimerMonCompte() async {}
+
   void emettre(SessionAuth? session) {
     _courante = session;
     _controleur.add(session);

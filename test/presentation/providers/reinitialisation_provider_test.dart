@@ -52,6 +52,9 @@ class _FauxAuthRepository implements AuthRepository {
     appels.add('definir');
     if (echecDefinir != null) throw echecDefinir!;
   }
+
+  @override
+  Future<void> supprimerMonCompte() async {}
 }
 
 void main() {

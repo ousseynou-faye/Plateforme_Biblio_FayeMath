@@ -16,6 +16,7 @@ import 'package:fayemath_academy/data/repositories/abonnement_repository.dart';
 import 'package:fayemath_academy/data/repositories/auth_repository.dart';
 import 'package:fayemath_academy/data/repositories/catalogue_repository.dart';
 import 'package:fayemath_academy/data/repositories/chapitre_repository.dart';
+import 'package:fayemath_academy/data/repositories/nettoyage_local.dart';
 import 'package:fayemath_academy/data/repositories/profil_repository.dart';
 import 'package:fayemath_academy/data/repositories/progression_repository.dart';
 import 'package:fayemath_academy/data/repositories/ressource_repository.dart';
@@ -29,6 +30,7 @@ import 'package:fayemath_academy/presentation/providers/profil_provider.dart';
 import 'package:fayemath_academy/presentation/providers/progression_provider.dart';
 import 'package:fayemath_academy/presentation/providers/reglages_provider.dart';
 import 'package:fayemath_academy/presentation/providers/ressource_provider.dart';
+import 'package:fayemath_academy/presentation/providers/suppression_compte_provider.dart';
 import 'package:fayemath_academy/presentation/providers/telechargement_provider.dart';
 
 Future<void> main() async {
@@ -88,7 +90,7 @@ Future<void> main() async {
         // `data/` (docs/ARCHITECTURE.md §3). On n'arrive ici que si la config
         // est presente, donc Supabase.instance est pret.
         authRepositoryProvider.overrideWith(
-          (ref) => AuthRepositorySupabase(client.auth),
+          (ref) => AuthRepositorySupabase(client),
         ),
         // Memoire de l'onboarding (lot « Qualite et experience eleve ») : un
         // simple drapeau « deja vu » dans le coffre chiffre du telephone (aucune
@@ -134,6 +136,12 @@ Future<void> main() async {
         telechargementRepositoryProvider.overrideWith(
           (ref) =>
               TelechargementRepositoryStorage(baseLocale, client, telechargeur),
+        ),
+        // Suppression de compte (RTBF, etape 29) : purge des donnees LOCALES de
+        // l'appareil (cache Drift personnel + PDF telecharges), apres la
+        // suppression cote serveur. Meme base locale partagee.
+        nettoyageLocalRepositoryProvider.overrideWith(
+          (ref) => NettoyageLocalAppareil(baseLocale),
         ),
       ],
       child: const FayeMathApp(),
